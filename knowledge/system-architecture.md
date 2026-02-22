@@ -32,6 +32,12 @@
               │ 51.2V 314Ah │  │  (carichi)   │
               │  ~16 kWh    │  │              │
               └──────────────┘  └──────────────┘
+
+                    ┌─────────────────┐
+                    │  Stick Logger   │
+                    │  LSW-3-C        │──WiFi──▶ Solarman Cloud
+                    │  (sul Deye)     │
+                    └─────────────────┘
 ```
 
 ## Ruoli dei Componenti
@@ -50,6 +56,17 @@
 - La casa è alimentata dall'uscita backup del Deye
 - Vede il SolarEdge come micro-inverter (SmartLoad = MicInv Input)
 - Modalità: Selling First con Load First
+- Monitoraggio cloud tramite stick logger LSW-3-C + Solarman
+
+### Stick Logger LSW-3-C → Monitoraggio Deye
+- Modello: Deye LSW-3-C
+- Collegato all'inverter Deye via porta COM (RS232/RS485)
+- Connessione WiFi 2.4GHz alla rete domestica
+- Invia dati al cloud Solarman (SolarmanSmart)
+- App mobile + portale web per monitoraggio real-time
+- Memoria interna 2MB per logging (intervallo 1-15 min)
+- Alimentato direttamente dall'inverter (plug-and-play)
+- Protocollo Modbus per integrazione con Home Assistant
 
 ### Battery Queen 51.2V 314Ah → Accumulo
 - Collegata al Deye via DC (protocollo BMS - CAN o RS485)
