@@ -12,8 +12,8 @@
 | Max A Charge | 200 | A | |
 | Max A Discharge | 200 | A | |
 | Batt Shutdown % | 10 | % | |
-| Batt Restart % | 50 | % | |
-| **Batt Low %** | **15** | **%** | **Modificato il 22/02/2026 (era 35%)** |
+| **Batt Restart %** | **35** | **%** | **Modificato il 22/02/2026 (era 50%, raccomandazione team)** |
+| **Batt Low %** | **20** | **%** | **Modificato 2x il 22/02/2026: 35%→15%→20% (raccomandazione team)** |
 | Activate Battery | Enable | | |
 | Lithium Mode | 0 | | |
 | Batt Charge Efficiency | 99 | % | |
@@ -49,12 +49,12 @@
 
 | Fascia | Grid Charge | Gen | Start | End | Power (W) | Batt % |
 |---|---|---|---|---|---|---|
-| Time 1 | No | No | 01:00 | 05:00 | 12000 | 10 |
-| Time 2 | No | No | 05:00 | 09:00 | 12000 | 10 |
-| Time 3 | No | No | 09:00 | 13:00 | 12000 | 10 |
-| Time 4 | No | No | 13:00 | 17:00 | 12000 | 10 |
-| Time 5 | No | No | 17:00 | 21:00 | 12000 | 10 |
-| Time 6 | No | No | 21:00 | 01:00 | 12000 | 10 |
+| Time 1 | No | No | 01:00 | 05:00 | 12000 | **20** |
+| Time 2 | No | No | 05:00 | 09:00 | 12000 | **20** |
+| Time 3 | No | No | 09:00 | 13:00 | 12000 | **20** |
+| Time 4 | No | No | 13:00 | 17:00 | 12000 | **20** |
+| Time 5 | No | No | 17:00 | 21:00 | 12000 | **20** |
+| Time 6 | No | No | 21:00 | 01:00 | 12000 | **20** |
 
 > NOTA: Le 6 fasce sono tutte identiche - il Time of Use non è effettivamente utilizzato.
 
