@@ -1,35 +1,52 @@
-# Pedemonte Energy
+# Pedemonte Digital Home
 
-Gestione energetica della casa di Pedemonte. L'obiettivo è rendere la casa il più possibile autosufficiente dal punto di vista energetico, massimizzando l'autoconsumo fotovoltaico e ottimizzando l'uso delle batterie di accumulo.
+Gestione della casa digitale di Pedemonte. L'obiettivo è rendere la casa autosufficiente dal punto di vista energetico e gestita in modo intelligente tramite Home Assistant e un team di agenti AI.
 
-## Impianto
+## Architettura Impianto
 
-- **Inverter**: Deye SUN-12K-SG04LP3-EU (trifase, 12 kW)
-- **Batteria**: BMS Lithium, 340 Ah (~17 kWh)
-- **Modalità**: Selling First, Load First
+| Componente | Modello | Ruolo |
+|---|---|---|
+| **Inverter ibrido** | Deye SUN-12K-SG04LP3-EU | Batteria + backup (casa su uscita backup) |
+| **Inverter PV** | SolarEdge SE10K-RWS | Produzione fotovoltaica |
+| **Batteria** | Battery Queen 51.2V 314Ah | Accumulo LiFePO4 (~16 kWh) |
+| **Stick Logger** | LSW-3-C | WiFi → Solarman cloud, Modbus TCP |
+| **Domotica** | Home Assistant OS | Automazioni, monitoraggio, controllo |
+| **EV Charger** | Tesla Wall Connector | Ricarica Biancaneve |
 
 ## Agenti AI
 
-Il progetto utilizza tre agenti Claude Code specializzati che lavorano in team:
+Il progetto utilizza 5 agenti Claude Code specializzati che lavorano in team:
 
+### Team Energia
 | Agente | Ruolo |
 |---|---|
-| `deye-expert` | Esperto inverter Deye trifase 12K: configurazione, commissioning, troubleshooting |
+| `deye-expert` | Esperto inverter Deye: configurazione, batteria, backup, Modbus |
 | `solaredge-expert` | Esperto inverter SolarEdge: ottimizzatori, StorEdge, monitoraggio |
 | `electrical-engineer` | Ingegnere elettrico: analisi energetica, ottimizzazioni, dimensionamento |
 
-Gli agenti condividono conoscenza tramite la directory `knowledge/` e seguono pattern/anti-pattern documentati nei rispettivi file in `.claude/agents/`.
+### Team Domotica
+| Agente | Ruolo |
+|---|---|
+| `homeassistant-expert` | Esperto HA: configurazione YAML, automazioni, API, integrazioni |
+| `domotica-expert` | Esperto domotica: scenari, comfort, UX, logica di automazione |
 
-## Knowledge Base
+Gli agenti condividono conoscenza tramite `knowledge/` e seguono pattern/anti-pattern nei file `.claude/agents/`.
+
+## Struttura Repository
 
 ```
-knowledge/
-├── knowledge.md              # Obiettivi e contesto generale
-├── deye/                     # Configurazione e analisi inverter Deye
-├── solaredge/                # Configurazione e analisi inverter SolarEdge
-├── optimizations/            # Strategie di ottimizzazione energetica
-├── configurations/           # Configurazioni applicate
-└── logs/                     # Storico delle modifiche e decisioni
+pedemonte-energy/              # Repo principale
+├── knowledge/                 # Knowledge base condivisa
+│   ├── knowledge.md           # Obiettivi e contesto
+│   ├── system-architecture.md # Architettura multi-inverter
+│   ├── deye/                  # Inverter Deye
+│   ├── solaredge/             # Inverter SolarEdge
+│   ├── optimizations/         # Strategie energetiche
+│   ├── homeassistant/         # Conoscenza HA
+│   ├── domotica/              # Scenari domotici
+│   └── logs/                  # Storico decisioni
+├── homeassistant/             # Submodule → pedemonte-homeassistant
+└── .claude/agents/            # Definizione agenti AI
 ```
 
 ## Stato Attuale
@@ -38,3 +55,4 @@ Configurazione Deye ottimizzata per backup reserve (22/02/2026):
 - Batt Low: 20% (riserva backup ~4 ore)
 - Batt Restart: 35%
 - TOU Batt: 20% su tutte le fasce
+- Battery Capacity: 314 Ah (corretto da 340)
