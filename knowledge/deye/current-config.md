@@ -8,7 +8,7 @@
 | Parametro | Valore | Unit | Note |
 |---|---|---|---|
 | Batt Type | BMS Lithium Batt | | |
-| Battery Capacity | 340 | Ah | |
+| **Battery Capacity** | **314** | **Ah** | **Modificato il 22/02/2026 (era 340, corretto per Battery Queen 314Ah)** |
 | Max A Charge | 200 | A | |
 | Max A Discharge | 200 | A | |
 | Batt Shutdown % | 10 | % | |
