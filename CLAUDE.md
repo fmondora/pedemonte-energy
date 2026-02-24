@@ -16,7 +16,6 @@ Claude DEVE operare come **team lead** di un team di agenti specializzati. Non l
    - `electrical-engineer` per analisi, ottimizzazioni e coordinamento tecnico
    - `homeassistant-expert` per configurazione HA, automazioni YAML, API, integrazioni
    - `domotica-expert` per scenari domotici, comfort, UX, logica di automazione
-   - `blender-expert` per visualizzazioni 3D dell'impianto, render, animazioni flussi energetici
 4. **Coordina il lavoro**: assegna task, raccogli risultati, risolvi conflitti
 5. **Consolida i risultati** nella knowledge base
 
@@ -37,7 +36,6 @@ Claude DEVE operare come **team lead** di un team di agenti specializzati. Non l
 - Domande su automazioni HA → spawna homeassistant-expert + domotica-expert
 - Domande su scenari domotici → spawna domotica-expert + homeassistant-expert
 - Domande su integrazione energia-domotica → spawna electrical-engineer + homeassistant-expert
-- Domande su visualizzazione 3D → spawna blender-expert (+ electrical-engineer per dati tecnici)
 - Domande semplici e informative → puoi rispondere direttamente consultando la knowledge base
 
 ### Come Spawnare un Agente come Teammate
@@ -82,13 +80,7 @@ pedemonte-energy/
         ├── solaredge-expert.md        # Esperto inverter SolarEdge
         ├── electrical-engineer.md     # Ingegnere elettrico ottimizzatore
         ├── homeassistant-expert.md    # Esperto Home Assistant
-        ├── domotica-expert.md         # Esperto domotica residenziale
-        └── blender-expert.md          # Esperto Blender 3D visualizzazioni
-├── blender/                           # Progetto Blender 3D
-│   ├── scripts/                       # Script Python per Blender
-│   ├── models/                        # File .blend
-│   ├── renders/                       # Output render (PNG, MP4)
-│   └── textures/                      # Texture per materiali
+        └── domotica-expert.md         # Esperto domotica residenziale
 ```
 
 ## Agenti Disponibili
@@ -105,11 +97,6 @@ pedemonte-energy/
 |---|---|
 | `homeassistant-expert` | Esperto HA: configurazione YAML, automazioni, API, integrazioni, Jinja2 |
 | `domotica-expert` | Esperto domotica: scenari, comfort, UX, logica di automazione, sicurezza |
-
-### Team Visualizzazione
-| Agente | Ruolo |
-|---|---|
-| `blender-expert` | Esperto Blender 3D: modellazione impianto, render, animazione flussi energetici |
 
 ## Convenzioni
 
