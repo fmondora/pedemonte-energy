@@ -1,17 +1,68 @@
 # Opzioni di Integrazione Deye SUN-12K-SG04LP3-EU con Home Assistant
 
-> Ultimo aggiornamento: 2026-02-23
-> Autore: deye-expert
-> Contesto: stick logger LSW-3 con Modbus passthrough non funzionante, push mode verso HA non funzionante
+> Ultimo aggiornamento: 2026-02-28
+> Autore: deye-expert, team-lead
+> Contesto: Deye Cloud API integrata in HA come command_line sensor
 
 ## Situazione Attuale
 
-L'inverter Deye SUN-12K-SG04LP3-EU è monitorato tramite stick logger LSW-3-C (SN: 3168688670) che carica dati al cloud Solarman (SolarmanSmart) con successo. Tuttavia l'integrazione locale con Home Assistant non funziona:
+**INTEGRAZIONE ATTIVA: Deye Cloud API (Opzione 4)** - implementata il 2026-02-28.
+
+L'inverter Deye SUN-12K-SG04LP3-EU è ora monitorato in HA tramite la Deye Cloud API:
+- **Script**: `homeassistant/scripts/deye_cloud_sensor.py` (solo stdlib, no dipendenze esterne)
+- **Sensore**: `command_line` sensor `sensor.deye_inverter` con polling ogni 5 minuti
+- **Credenziali**: in `/config/secrets.yaml` (deye_appid, deye_appsecret, deye_email, deye_password)
+- **13 template sensors** derivati dagli attributi del sensore principale
+
+### Sensori attivi in HA
+
+**Energia (kWh, total_increasing) - per Energy Dashboard:**
+- `sensor.deye_grid_import_energy` ← `TotalEnergyBuy` (contatore hardware CT)
+- `sensor.deye_grid_export_energy` ← `TotalEnergySell` (contatore hardware CT)
+- `sensor.deye_battery_charge_energy` ← `TotalChargeEnergy`
+- `sensor.deye_battery_discharge_energy` ← `TotalDischargeEnergy`
+- `sensor.deye_consumption_energy` ← `TotalConsumption`
+
+**Potenza (W, measurement) - per monitoraggio real-time:**
+- `sensor.deye_battery_power` ← `BatteryPower`
+- `sensor.deye_grid_power` ← `TotalGridPower`
+- `sensor.deye_consumption_power` ← `TotalConsumptionPower`
+
+**Stato:**
+- `sensor.deye_battery_soc` ← `SOC` (%)
+- `sensor.deye_battery_voltage` ← `BatteryVoltage` (V)
+- `sensor.deye_inverter_temperature` ← `AC Temperature` (°C)
+
+**Giornalieri (kWh):**
+- `sensor.deye_daily_production` ← `DailyActiveProduction`
+- `sensor.deye_daily_consumption` ← `DailyConsumption`
+
+### Energy Dashboard configurato con:
+- **Rete**: `sensor.deye_grid_import_energy` / `sensor.deye_grid_export_energy` (contatori HW, sostituiscono i vecchi Riemann sum)
+- **Solare**: `sensor.solar_production_energy` (Riemann sum su SolarEdge, unica fonte PV)
+- **Batteria**: `sensor.deye_battery_charge_energy` / `sensor.deye_battery_discharge_energy`
+
+### Note tecniche API
+- La risposta API usa `deviceDataList` come chiave (NON `data`)
+- Il token è nel campo `accessToken` (camelCase)
+- L'API restituisce ~75 datapoint per device
+- I valori cumulativi (Total*) sono contatori hardware molto più accurati dei Riemann sum
+
+### Cosa è stato rimosso
+- `sensor.grid_import_energy` (Riemann sum su grid_import_power) → sostituito da `sensor.deye_grid_import_energy`
+- `sensor.grid_export_energy` (Riemann sum su grid_export_power) → sostituito da `sensor.deye_grid_export_energy`
+- I template sensors `grid_import_power` e `grid_export_power` sono MANTENUTI (usati da Abundance)
+
+---
+
+### Integrazioni precedentemente tentate (NON funzionanti)
+
+L'integrazione locale con Home Assistant non funziona:
 
 - **Modbus passthrough (porta 8899)**: risponde con status 0x01, il firmware non inoltra le richieste Modbus
 - **Push mode (solarman_deye su porta 10000)**: 0 frame ricevuti, la configurazione nascosta del logger punta entrambi i server al cloud e non e' modificabile
 
-Servono alternative per portare i dati del Deye in Home Assistant.
+Le opzioni alternative sono documentate sotto per riferimento futuro (es. upgrade a RS485 per latenza < 5s).
 
 ---
 
@@ -284,16 +335,17 @@ L'Elfin EW11A e' un gateway compatto RS485-to-WiFi con supporto Modbus TCP:
 
 ## Confronto Riepilogativo
 
-| Criterio | Cloud API | DNS Redirect | RS485 (EW11) |
-|---|---|---|---|
-| Costo | Gratuito | Gratuito* | 20-30 EUR |
-| Complessita' setup | Bassa | Alta | Media |
-| Affidabilita' | Media | Bassa | **Alta** |
-| Latenza dati | 5-15 min | 1-5 min | **< 5 sec** |
-| Cloud mantenuto | Si | **No** | **Si** |
-| Scrittura registri | No | No | **Si** |
-| Dipendenza esterna | Cloud Solarman | DNS/firmware | Nessuna |
-| Accesso fisico | No | No | Si (una tantum) |
+| Criterio | Solarman API | DNS Redirect | RS485 (EW11) | **Deye Cloud** ★ |
+|---|---|---|---|---|
+| Costo | Gratuito | Gratuito* | 20-30 EUR | **Gratuito** |
+| Complessita' setup | Bassa | Alta | Media | **Bassa** |
+| Credenziali | Email richiesta | N/A | N/A | **Self-service** |
+| Affidabilita' | Media | Bassa | **Alta** | Media |
+| Latenza dati | 5-15 min | 1-5 min | **< 5 sec** | 5-15 min |
+| Cloud mantenuto | Si | **No** | **Si** | Si |
+| Scrittura registri | No | No | **Si** | Parziale |
+| Dipendenza esterna | Cloud Solarman | DNS/firmware | Nessuna | Cloud Deye |
+| Accesso fisico | No | No | Si (una tantum) | No |
 
 *Richiede Pi-hole/AdGuard se il router non supporta DNS override
 
@@ -314,11 +366,83 @@ Motivazioni:
 
 ### Strategia suggerita: Approccio a due fasi
 
-**Fase 1 (immediata)**: Installare Cloud API come soluzione temporanea per avere subito i dati in HA, anche se con latenza.
+**Fase 1 (immediata)**: Usare la **Deye Cloud API** (Opzione 4, self-service) per avere subito i dati in HA.
 
-**Fase 2 (appena arriva l'hardware)**: Installare l'Elfin EW11A sulla porta Meter-485 per avere dati real-time e controllo bidirezionale.
+**Fase 2 (appena arriva l'hardware)**: Installare l'Elfin EW11A sulla porta Meter-485 per dati real-time e controllo bidirezionale.
 
-Una volta che l'EW11 funziona, la Cloud API puo' essere mantenuta come backup/confronto oppure rimossa.
+---
+
+## Opzione 4: Deye Cloud API (Self-Service) ★ NUOVA
+
+> Aggiunta: 2026-02-25
+
+### Descrizione
+Deye ha un portale sviluppatori **self-service** dove si possono ottenere AppId e AppSecret direttamente, senza dover inviare email. I dati passano dal logger al cloud Solarman → sincronizzati su Deye Cloud → recuperati via API REST.
+
+### Portale sviluppatori
+- **Registrazione/Login**: https://www.deyecloud.com/login
+- **Creazione app**: https://developer.deyecloud.com/app
+- **Documentazione API**: https://developer.deyecloud.com/api
+- **Sample code Python**: https://github.com/DeyeCloudDevelopers/deye-openapi-client-sample-code
+- **Supporto**: cloudservice@deye.com.cn
+
+### API endpoints (regione EU)
+- **Base URL**: `https://eu1-developer.deyecloud.com/v1.0`
+- **Autenticazione**: `POST /account/token?appId={appId}`
+- **Lista stazioni**: `POST /station/list`
+- **Dati stazione**: `POST /station/latest`
+- **Lista dispositivi**: `POST /device/list`
+- **Dati dispositivo real-time**: `POST /device/latest`
+- **Dati storici**: `POST /device/history`
+- **Punti di misura**: `POST /device/measure/point`
+- **Controllo inverter**: endpoint sotto `/commission/`
+
+### Autenticazione
+```
+POST /account/token?appId={appId}
+{
+  "appSecret": "<appsecret>",
+  "email": "<email>",
+  "password": "<sha256_hash_password>",
+  "companyId": "0"
+}
+→ response contiene access_token (durata: 2 ore)
+→ usare header: Authorization: bearer <token>
+```
+
+### Script Python
+Disponibile in `scripts/deye_cloud.py`:
+```bash
+# Setup: compilare .env con DEYE_APPID, DEYE_APPSECRET, DEYE_EMAIL, DEYE_PASSWORD
+python3 scripts/deye_cloud.py --discover     # Scopri stazioni e dispositivi
+python3 scripts/deye_cloud.py               # Dati real-time inverter
+python3 scripts/deye_cloud.py --json-flat   # Output per HA command_line
+python3 scripts/deye_cloud.py --loop 300    # Loop continuo ogni 5 min
+```
+
+### Integrazione con HA
+I dati possono essere integrati in HA tramite:
+1. **command_line sensor** - Lo script Python gira come sensore periodico
+2. **REST sensor** - Usando i dati API direttamente
+3. **MQTT** - Lo script pubblica su broker MQTT
+
+### Valutazione
+
+| Criterio | Valore |
+|---|---|
+| **Hardware necessario** | Nessuno |
+| **Costo** | Gratuito |
+| **Complessita'** | **Bassa** - self-service, credenziali immediate |
+| **Affidabilita'** | Media - dipende dal cloud Deye |
+| **Latenza dati** | 5-15 minuti |
+| **Mantiene cloud** | Si |
+| **Scrittura registri** | **Parziale** - API di commissioning disponibili |
+| **Rischio** | Basso |
+
+### Vantaggio rispetto a Opzione 1 (Solarman API)
+- **Credenziali self-service**: non serve inviare email, si ottengono dal portale sviluppatori
+- **API di controllo**: endpoints di commissioning per controllare l'inverter
+- **Documentazione ufficiale**: portale sviluppatori con sample code Python
 
 ---
 
