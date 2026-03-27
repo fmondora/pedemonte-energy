@@ -113,6 +113,63 @@ ANNOUNCEMENTS = {
         "voice": "Kore",
         "file": "grid_export_announcement.mp3",
     },
+    "surplus_all": {
+        "text": (
+            "Say this as a calm, professional British train station announcement, "
+            "with measured pacing and a warm, cheerful tone: "
+            "Good afternoon, ladies and gentlemen. "
+            "We are pleased to announce an abundance of solar energy. "
+            "Battery fully charged, with hours of sunshine remaining. "
+            "This would be an excellent time to fire up the sauna, "
+            "plug in your Tesla, "
+            "or run your washing machine, dishwasher, or tumble dryer. "
+            "Thank you for choosing solar energy."
+        ),
+        "voice": "Kore",
+        "file": "surplus_all.mp3",
+    },
+    "surplus_appliances": {
+        "text": (
+            "Say this as a calm, professional British train station announcement, "
+            "with measured pacing and a warm, cheerful tone: "
+            "Good morning, ladies and gentlemen. "
+            "We are pleased to announce an abundance of solar energy. "
+            "Battery fully charged, with hours of sunshine remaining. "
+            "This would be an excellent time to run your washing machine, "
+            "dishwasher, or tumble dryer. "
+            "Thank you for choosing solar energy."
+        ),
+        "voice": "Kore",
+        "file": "surplus_appliances.mp3",
+    },
+    "surplus_sauna": {
+        "text": (
+            "Say this as a calm, professional British train station announcement, "
+            "with measured pacing and a warm, cheerful tone: "
+            "Good afternoon, ladies and gentlemen. "
+            "We are pleased to announce an abundance of solar energy. "
+            "Battery fully charged, with hours of sunshine remaining. "
+            "This would be an excellent time to fire up the sauna, "
+            "or run your washing machine, dishwasher, or tumble dryer. "
+            "Thank you for choosing solar energy."
+        ),
+        "voice": "Kore",
+        "file": "surplus_sauna.mp3",
+    },
+    "surplus_tesla": {
+        "text": (
+            "Say this as a calm, professional British train station announcement, "
+            "with measured pacing and a warm, cheerful tone: "
+            "Good afternoon, ladies and gentlemen. "
+            "We are pleased to announce an abundance of solar energy. "
+            "Battery fully charged, with hours of sunshine remaining. "
+            "This would be an excellent time to plug in your Tesla, "
+            "or run your washing machine, dishwasher, or tumble dryer. "
+            "Thank you for choosing solar energy."
+        ),
+        "voice": "Kore",
+        "file": "surplus_tesla.mp3",
+    },
 }
 
 
