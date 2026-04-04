@@ -7,6 +7,12 @@ Branch: `agent-house`
 
 Sostituire Home Assistant con un sistema di agenti AI autonomi che parlano direttamente con i device della casa, ragionano sullo stato, agiscono, e si espongono via internet attraverso un'interfaccia adattiva. Nessun intermediario — ogni agente conosce i suoi device e comunica con gli altri via MQTT.
 
+### Ispirazioni
+
+- **[SAGE](https://github.com/SAIC-MONTREAL/SAGE)** (Samsung AI Montreal) — albero dinamico di prompt LLM, comandi persistenti generati come codice, recupero automatico da errori, personalizzazione con memoria a lungo termine
+- **[Smart-Home-Orchestrator](https://github.com/sumukhaAD/Smart-Home-Orchestrator)** — state compression per ridurre i token mandati all'LLM
+- **[home-llm](https://github.com/acon96/home-llm)** — modelli <5B fine-tunati per function calling smart home
+
 ---
 
 ## Architettura
@@ -73,6 +79,7 @@ Ogni device agent è un processo Python indipendente che:
 2. Pubblica lo stato su topic MQTT standardizzati
 3. Ascolta comandi su topic MQTT dedicati
 4. Scrive metriche in InfluxDB
+5. **Recupero automatico da errori** (ispirato da SAGE): se un comando fallisce, l'agent riprova con strategia alternativa (retry, endpoint diverso, reboot device). Se non riesce, pubblica un errore su `system/agent/{name}/error` e l'orchestratore decide come gestirlo (notifica, fallback, escalation)
 
 ### Shelly Agent
 
@@ -186,6 +193,18 @@ Il cervello del sistema. È un processo Python che:
 
 Si iscrive a `device/#` e mantiene un **state store in memoria** con lo stato corrente di tutti i device. Ogni cambiamento di stato viene valutato.
 
+**State compression** (ispirato da Smart-Home-Orchestrator): prima di mandare il contesto all'LLM, lo stato viene compresso in formato token-efficiente. Invece di mandare il JSON completo di tutti i device (~decine di kB), un algoritmo produce un sommario compatto:
+
+```
+ENERGY: pv=5.2kW grid=-3.1kW soc=98% load=2.1kW(L1:0.9 L2:0.8 L3:0.4)
+CLIMATE: soggiorno=21.5°/45% camera=19.8°/50% ext=15.2°/60% rain=0
+LIGHTS: scale=ON(5min) cucina=OFF garage=OFF rooftop=OFF
+SECURITY: garage_door=closed ring_last_motion=2h_ago
+TESLA: soc=65% charging=no home=yes
+```
+
+Riduzione ~70% dei token, l'LLM ragiona sulla stessa informazione con costi e latenza molto inferiori.
+
 ### 2. Ragiona con LLM ibrido
 
 **Ollama locale (Qwen3-30B-A3B)** — decisioni frequenti e leggere:
@@ -197,6 +216,67 @@ Si iscrive a `device/#` e mantiene un **state store in memoria** con lo stato co
 - Una volta al giorno (mattina): "strategia energetica per oggi" basata su forecast meteo, storico consumi, prezzi energia
 - Su eventi significativi: "il garage è aperto da 2 ore, piove, e nessuno è in casa — che faccio?"
 - Analisi anomalie: "consumo notturno 800W quando di solito sono 200W"
+
+### 2b. Albero decisionale dinamico (ispirato da SAGE)
+
+L'orchestratore NON ha logiche if/else hardcodate. Per ogni situazione, l'LLM costruisce un **albero di decisioni**:
+
+```
+Evento: surplus 5kW, SOC 98%, ore sole 3h
+    │
+    ├─ LLM: "Cosa posso suggerire?"
+    │   ├─ Controlla stato Tesla → SOC 65%, a casa → suggerisci ricarica
+    │   ├─ Controlla orario → 15:30, sabato → sauna possibile
+    │   └─ Controlla storico → Francesco accende sauna il sabato 2/3 volte
+    │
+    ├─ LLM: "Che priorità?"
+    │   └─ Tesla prima (accumula energia), sauna dopo (consuma subito)
+    │
+    └─ LLM: "Come comunico?"
+        ├─ Feed: energy_card con azioni
+        ├─ Push: notifica Francesco
+        └─ Sonos: annuncio surplus
+```
+
+Ogni nodo dell'albero è una chiamata LLM che valuta il contesto e decide il passo successivo. L'albero è diverso ogni volta, perché il contesto è diverso.
+
+### 2c. Comandi persistenti (ispirato da SAGE)
+
+L'utente può creare **regole in linguaggio naturale** che l'orchestratore traduce in trigger monitorati:
+
+```
+Utente: "Quando la batteria è piena e c'è surplus, accendi la sauna automaticamente il sabato"
+
+Orchestratore:
+1. LLM genera codice di verifica:
+   def check(): return soc >= 98 and surplus > 3 and weekday == 5 and 14 <= hour <= 20
+2. Il trigger viene salvato in SQLite
+3. Ad ogni ciclo, l'orchestratore valuta i trigger attivi
+4. Quando scatta: esegue l'azione (con livello safe/critical appropriato)
+```
+
+I trigger persistenti sostituiscono le automazioni YAML di HA. Il vantaggio: l'utente li crea con linguaggio naturale, l'LLM li traduce in codice, e l'orchestratore li esegue. Possono essere modificati, disattivati, o eliminati dal frontend.
+
+### 2d. Personalizzazione e memoria (ispirato da SAGE)
+
+L'orchestratore accumula **preferenze e pattern** dagli utenti:
+
+**Memoria a breve termine** (state store in memoria):
+- Stato corrente di tutti i device
+- Azioni recenti (ultime 24h)
+
+**Memoria a lungo termine** (InfluxDB + SQLite):
+- Pattern comportamentali: "Francesco accende la sauna il sabato pomeriggio"
+- Feedback su suggerimenti: "ha accettato 8/10 suggerimenti surplus ma mai quello della lavastoviglie"
+- Profili giornalieri: "nei giorni lavorativi consumo medio 1.2kW, nel weekend 2.8kW"
+- Anomalie passate e come sono state risolte
+
+**Profili utente gerarchici** (ispirato da SAGE):
+- Sommari giornalieri: "oggi Francesco ha acceso la sauna alle 16, spento luci manualmente 3 volte"
+- Sommari settimanali: aggregazione automatica
+- Profilo globale: preferenze consolidate usate dall'LLM per decisioni proattive
+
+Il prompt dell'orchestratore include sempre il profilo dell'utente attivo, permettendo decisioni personalizzate: "Francesco preferisce che le luci si spengano da sole, Lucia le spegne manualmente" → per Francesco l'orchestratore è proattivo, per Lucia suggerisce ma non agisce.
 
 ### 3. Genera il feed UI
 
@@ -278,6 +358,10 @@ Frontend → WebSocket → Orchestratore
   - `POST /api/action` — esegui azione
   - `GET /api/history/{metric}` — dati storici da InfluxDB
   - `GET /api/config` — configurazione utente (ruolo, permessi)
+  - `GET /api/triggers` — lista trigger persistenti dell'utente
+  - `POST /api/triggers` — crea trigger in linguaggio naturale (l'LLM lo traduce in codice)
+  - `DELETE /api/triggers/{id}` — elimina trigger
+  - `PATCH /api/triggers/{id}` — abilita/disabilita trigger
 
 ---
 
@@ -361,6 +445,8 @@ Timeout e default per azioni critical:
 | `InsightCard` | Consigli e statistiche dall'LLM |
 | `ChartCard` | Grafici storici (produzione, consumi, SOC) |
 | `DeviceCard` | Stato singolo device con controllo diretto |
+| `TriggerCard` | Trigger persistente: descrizione naturale, stato on/off, ultime esecuzioni |
+| `NaturalInput` | Campo testo per creare trigger/regole in linguaggio naturale |
 
 L'orchestratore compone il feed come un array ordinato di questi componenti. Il frontend li renderizza in un layout verticale (mobile-first) o grid (desktop).
 
@@ -438,9 +524,44 @@ orchestrator/decision                  # decisioni prese dall'orchestratore
 orchestrator/push/notify               # richiesta notifica al push-agent
 orchestrator/push/announce             # richiesta annuncio vocale
 
+orchestrator/trigger/create             # nuovo trigger persistente (da frontend)
+orchestrator/trigger/fired              # trigger scattato
+orchestrator/trigger/status             # stato trigger attivi
+
 system/agent/{agent_name}/status       # heartbeat e stato di ogni agente
 system/agent/{agent_name}/log          # log operativo
+system/agent/{agent_name}/error        # errore device con contesto per recovery
 ```
+
+---
+
+## Gestione Errori e Resilienza
+
+### Device agent: retry con escalation
+
+Ogni device agent gestisce errori in 3 livelli:
+
+1. **Retry locale** — riprova la stessa operazione (max 3 volte, backoff esponenziale)
+2. **Strategia alternativa** — prova un endpoint diverso o un comando equivalente (es. Shelly Gen2 `/rpc/Switch.Set` fallisce → prova `/relay/0?turn=on` Gen1 style)
+3. **Escalation all'orchestratore** — pubblica su `system/agent/{name}/error` con contesto. L'orchestratore decide:
+   - Notifica all'admin
+   - Tenta via un altro agent (es. se Shelly non risponde, prova Zigbee se lo stesso attuatore ha doppio protocollo)
+   - Marca il device come offline nel feed
+
+### Orchestratore: degradazione graceful
+
+Se l'LLM locale (Ollama) non risponde:
+- Fallback a regole statiche per decisioni urgenti (safety)
+- Le decisioni non urgenti vengono accorate fino al ripristino
+- Claude API come backup per decisioni critiche
+
+Se Claude API non risponde:
+- L'LLM locale gestisce tutto, con ragionamento ridotto
+- Le funzioni che richiedono ragionamento pesante (strategia giornaliera) vengono posposte
+
+Se MQTT broker va giù:
+- Ogni agent ha un buffer locale (deque in memoria) che accumula messaggi
+- Al ripristino, pubblica il backlog
 
 ---
 
