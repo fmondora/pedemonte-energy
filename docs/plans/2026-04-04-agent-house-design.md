@@ -107,6 +107,40 @@ Primitivi atomici. Zero logica. Come i "financial primitives" di Block (payments
 | `zigbee.get_contact(device_id)` | Stato sensore porta/finestra | zigbee2mqtt/MQTT |
 | `velux.set_position(window_id, pos)` | Apri/chiudi finestra/tapparella | pyvlx LAN |
 
+#### Presenza
+
+| Capability | Cosa fa | Protocollo |
+|---|---|---|
+| `presence.scan_network()` | Chi è in casa (WiFi MAC noti) | ARP scan LAN |
+| `presence.get_voice_user()` | Chi ha parlato con Alexa | Alexa Voice Profiles |
+| `presence.get_tesla_location()` | Francesco a casa/fuori | Tesla Fleet API (geofence) |
+| `presence.get_room(room)` | Chi è nella stanza (futuro: mmWave Zigbee) | zigbee2mqtt/MQTT |
+
+La presenza è un **segnale composito** nel world model, costruito da più fonti:
+
+| Segnale | Cosa dice | Hardware necessario |
+|---|---|---|
+| Telefono su WiFi (ARP scan) | Chi è in casa | Nessuno — già presente |
+| Tesla GPS | Francesco a casa/fuori | Nessuno — Tesla Fleet API |
+| Echo voice profiles | Chi ha parlato, in quale stanza | Nessuno — Echo già presenti |
+| Shelly power patterns | Qualcuno c'è (consumi attivi) | Nessuno — Shelly già presenti |
+| Ring motion | Qualcuno è arrivato/uscito | Nessuno — Ring già presente |
+| mmWave Zigbee per stanza | Chi è in quale stanza, anche da fermo | ~€15/stanza (futuro) |
+
+Il world model mantiene lo stato presenza aggiornato:
+
+```
+PRESENCE: francesco=home(wifi+voice+tesla) lucia=home(wifi) anna=away vicki=away
+LAST_VOICE: francesco 5min_ago(soggiorno) lucia 22min_ago(cucina)
+CONSUMPTION: 1.9kW(normal_for_2_people)
+```
+
+L'intelligence layer usa la presenza per adattare il comportamento senza regole esplicite:
+- Nessuno in casa → modalità assenza (consumi minimi, sicurezza attiva, luci off)
+- Solo Anna e Vicki → niente annunci surplus, solo luci zone loro
+- Francesco arriva (Tesla geofence) → push "bentornato", proponi apertura garage
+- Tutti fuori + consumo > 400W → "Qualcosa è rimasto acceso" push a Francesco
+
 #### Sicurezza
 
 | Capability | Cosa fa | Protocollo |
@@ -548,11 +582,50 @@ Shortcut/Tasker "Apri Garage":
 | Lucia | family | Energia (vista), clima, comfort, garage | Luci, temperatura, scene | Garage (con conferma) | ntfy (iPhone Lucia) |
 | Anna | limited | Comfort, garage | Luci sua zona, scene | Garage (con conferma) | — |
 | Vicki | limited | Comfort, garage | Luci sua zona, scene | Garage (con conferma) | — |
+| Ospite | guest | Clima, luci zona ospiti, WiFi | Luci zona ospiti | Garage (con conferma) | — |
+
+### Ospiti
+
+Francesco crea un accesso ospite dalla PWA, da Telegram, o da Alexa:
+
+> "Alexa, prepara la casa per ospiti, una settimana"
+
+Il sistema:
+1. Genera un link temporaneo: `casa.pedemonte.it/guest/abc123` (scadenza configurabile)
+2. Configura le zone ospiti (luci, clima)
+3. Invia il link via Telegram/WhatsApp
+4. Su Echo nella camera ospiti, i comandi vocali funzionano nella zona guest senza configurazione
+
+L'ospite apre il link — niente email, niente password, niente app da installare.
+
+### Contesti della casa
+
+Il sistema non ha "regole da pausare". Ha un **contesto** nel world model — l'intelligence layer adatta il comportamento di conseguenza:
+
+| Contesto | Come si attiva | Cosa cambia |
+|---|---|---|
+| **Ospiti** | "Alexa, abbiamo ospiti" / PWA | Annunci Sonos solo zone private, timer luci estesi, riscaldamento camera ospiti, link guest generato |
+| **Vacanza** | "Alexa, siamo in vacanza" / PWA | Modalità assenza: luci random anti-intrusione, consumi minimi, report sicurezza giornaliero, garage bloccato |
+| **Cena** | "Alexa, stasera cena" / PWA | Luci soggiorno/cucina scena cena, niente annunci, temperatura comfort |
+| **Lavoro da casa** | "Alexa, sto lavorando" / PWA | Niente interruzioni non urgenti, studio silenzioso, push solo critici |
+| **Notte** | Automatico (ora + presenza) | Consumi minimi, sicurezza attiva, luci spente, annunci disabilitati |
+| **Normale** | Default | Comportamento standard |
+
+I contesti si combinano: "ospiti + cena" = luci cena + niente annunci + zone ospiti attive.
+
+Il contesto è un dato nel world model, non una regola:
+
+```
+CONTEXT: guests=true(7d, since=2026-04-05) working_from_home=false vacation=false
+```
+
+L'intelligence layer ragiona su questo contesto ad ogni ciclo — non servono regole per ogni combinazione.
 
 ### Autenticazione
 
-- **Cloudflare Access**: email OTP, zero password
-- Email → ruolo mappato in SQLite
+- **Cloudflare Access**: email OTP per famiglia, zero password
+- **Link temporaneo** per ospiti (token con scadenza)
+- Email/token → ruolo mappato in SQLite
 - Token JWT nel WebSocket identifica l'utente
 
 ### Safe vs Critical
