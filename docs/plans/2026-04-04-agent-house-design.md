@@ -400,12 +400,79 @@ Il sistema ti dice cosa gli manca, perché, quanto costa, e cosa guadagni. La ro
 
 Le superfici attraverso cui il sistema interagisce con gli umani. Importanti ma **non il centro di valore** — il valore è nel world model e nell'intelligence layer.
 
-### Feed adattivo (web)
+Il principio: **il sistema raggiunge l'utente dove si trova**, non l'utente che va al sistema.
 
-- **React/Preact + TypeScript**, PWA installabile
+### Gerarchia delle interfacce
+
+```
+Voce (Alexa)     → "cosa succede?" "fai questo"     → interazione veloce, mani libere
+Push (telefono)  → azione urgente, bottone rapido    → interruzione giustificata
+Feed (web/PC)    → monitoring, trend, configurazione → consultazione approfondita
+Sonos            → annunci proattivi del sistema     → il sistema ti cerca quando serve
+Echo Show        → display ambientale per stanza     → la casa visibile dove sei
+```
+
+Non sono alternative — si **complementano**.
+
+### Echo Show — terminali primari della casa
+
+Gli Echo Show sostituiscono il ruolo del "tablet HA appeso al muro". Ma meglio: sono tanti, uno per stanza, ognuno contestuale. L'intelligence layer genera schermate **APL** (Alexa Presentation Language) dinamiche — stesso principio del feed JSON, ma renderizzato come UI nativa Alexa.
+
+| Stanza | Device | Mostra |
+|---|---|---|
+| Cucina | Echo Show | Energia + clima + suggerimenti giornalieri |
+| Soggiorno | Echo Show | Dashboard completa + musica + ospiti |
+| Camera | Echo Show | Clima + sveglia + "buonanotte" |
+
+Ogni schermata si adatta a **ora, stanza, utente, e stato della casa**:
+
+- Echo Show cucina alle 7: "Buongiorno Lucia. Oggi sole fino alle 18, buon momento per la lavatrice dopo le 10."
+- Echo Show cucina alle 22: "Buonanotte. Batteria 85%. Garage chiuso. Scale si spengono tra 3 min."
+
+#### Confronto con HA Green
+
+| | HA Green + tablet | Echo Show × stanze |
+|---|---|---|
+| Posizione | 1 posto, vai lì | Già dove sei |
+| Input | Touch | Voce + touch |
+| Contesto | Dashboard uguale ovunque | Dashboard per stanza |
+| Manutenzione | Aggiornamenti HA, YAML, debug | Zero — il sistema genera le schermate |
+| Costo aggiuntivo | Green €100 + tablet €200+ | Già presenti in casa |
+
+### Alexa — voce bidirezionale
+
+Due canali nello stesso Alexa Skill:
+
+| Canale | Quando | Esempio | Passa dall'LLM? |
+|---|---|---|---|
+| **Smart Home** (diretto) | Comandi su device | "Alexa, spegni luce tavolo" | No — capability diretta, <1s |
+| **Custom Skill** (conversazione) | Domande e richieste complesse | "Alexa, com'è la batteria?" | Sì — intelligence layer |
+
+#### Smart Home Skill — comandi diretti
+
+Ogni capability `shelly.*` viene esposta come device Alexa nativo. Nessun LLM coinvolto, latenza sotto il secondo:
+
+- "Alexa, spegni luce del tavolo" → `shelly.turn_off(tavolo)`
+- "Alexa, metti la luce del soggiorno al 50%" → `shelly.set_brightness(soggiorno, 50)`
+- "Alexa, accendi la sauna" → verifica ruolo → `shelly.turn_on(sauna)`
+
+#### Custom Skill — conversazione intelligente
+
+Per domande, analisi, richieste complesse. L'intelligence layer riceve il testo, ragiona sul world model, compone la risposta:
+
+- "Alexa, com'è la casa?" → "Tutto bene. Sei kilowatt di surplus, batteria piena."
+- "Alexa, perché stanotte abbiamo consumato tanto?" → "Consumo medio 2.8 kW contro i soliti 1.2. Causa probabile: deumidificatore cantina rimasto acceso."
+- "Alexa, com'è la batteria della macchina?" → "Tesla al 58%. Vuoi che inizi a caricare con il surplus?"
+
+Su Echo Show, la risposta vocale è accompagnata da una **schermata APL contestuale** (grafico consumi, stato device, ecc.).
+
+### Feed adattivo (web/PC)
+
+- **React/Preact + TypeScript**, PWA installabile su telefono, tablet, PC
 - **WebSocket** per aggiornamenti real-time
 - **Pagina singola adattiva** — il feed si ricompone in base al contesto
 - L'intelligence layer decide cosa mostrare, in che ordine, con che priorità
+- Esposto su `casa.pedemonte.it` via Cloudflare Tunnel
 
 Componenti UI (set fisso, ben progettati):
 
@@ -426,20 +493,19 @@ Componenti UI (set fisso, ben progettati):
 
 - **ntfy** per push iOS/Android con azioni
 - Azioni actionable: l'utente risponde direttamente dalla notifica
+- Usato per interruzioni giustificate: surplus, anomalie, conferme critiche
 
-### Sonos (voce)
+### Sonos (voce output)
 
 - **SoCo** per annunci sulla Soundbar e SpaMusic
 - **Gemini TTS** per annunci dinamici (stile treno inglese)
 - Ding + annuncio con `announce: true` (overlay su musica)
+- Annunci proattivi — il sistema parla quando ha qualcosa di rilevante da dire
 
 ### Telegram
 
 - Bot per messaggi testo + foto (snapshot Ring, grafici)
-
-### Alexa (futuro)
-
-- Smart Home Skill per annunci multi-room
+- Canale asincrono — per report, riassunti giornalieri, foto sicurezza
 
 ---
 
