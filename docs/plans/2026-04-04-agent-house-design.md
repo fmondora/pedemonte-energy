@@ -466,13 +466,27 @@ Per domande, analisi, richieste complesse. L'intelligence layer riceve il testo,
 
 Su Echo Show, la risposta vocale è accompagnata da una **schermata APL contestuale** (grafico consumi, stato device, ecc.).
 
-### Feed adattivo (web/PC)
+### Feed adattivo — PWA cross-platform
 
-- **React/Preact + TypeScript**, PWA installabile su telefono, tablet, PC
+- **React/Preact + TypeScript**, PWA installabile su qualsiasi device
 - **WebSocket** per aggiornamenti real-time
 - **Pagina singola adattiva** — il feed si ricompone in base al contesto
 - L'intelligence layer decide cosa mostrare, in che ordine, con che priorità
 - Esposto su `casa.pedemonte.it` via Cloudflare Tunnel
+
+Nessuna app nativa. La PWA installata **è** un'app:
+
+| | App nativa iOS/Android | PWA |
+|---|---|---|
+| Icona home screen | Sì | Sì |
+| Full screen | Sì | Sì |
+| Push notifications | Sì | Sì (iOS 16.4+, Android nativo) |
+| Offline | Sì | Sì (service worker) |
+| Sviluppo | Swift + Kotlin, 2 codebase | 1 codebase, funziona ovunque |
+| Distribuzione | App Store/Play Store, review | URL → "Aggiungi a Home" |
+| Aggiornamenti | Build + submit + review | Deploy → tutti aggiornati |
+
+Funziona identicamente su iOS, Android, PC, tablet, Linux — qualsiasi device con un browser.
 
 Componenti UI (set fisso, ben progettati):
 
@@ -488,6 +502,21 @@ Componenti UI (set fisso, ben progettati):
 | `TriggerCard` | Trigger persistente con stato e azioni |
 | `FailureCard` | Proposta roadmap (cosa manca al sistema) |
 | `NaturalInput` | Campo per creare regole in linguaggio naturale |
+
+### Accesso remoto — azioni rapide
+
+Per azioni frequenti da remoto (es. garage), oltre alla PWA:
+
+- **iOS**: Apple Shortcut che chiama l'API via Cloudflare. Widget in home screen, attivabile da Apple Watch. Associabile ad automazioni iOS (arrivo a casa → proponi apertura)
+- **Android**: widget Chrome della PWA, oppure Tasker/Automate per chiamate HTTP dirette
+- **Entrambi**: il geofence Tesla rileva l'arrivo a casa — il sistema può proporre "apri garage?" via push prima ancora che tu prenda il telefono
+
+```
+Shortcut/Tasker "Apri Garage":
+  POST https://casa.pedemonte.it/api/action
+  Header: Authorization: Bearer {token}
+  Body: {"capability": "shelly.toggle_garage"}
+```
 
 ### Push (mobile)
 
