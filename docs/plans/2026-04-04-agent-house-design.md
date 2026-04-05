@@ -542,10 +542,19 @@ Ogni interazione dell'utente (accetta, rifiuta, modifica) arricchisce il world m
 
 | Componente | Cosa | Prezzo stimato |
 |---|---|---|
-| Mini PC N100 16GB RAM, 512GB SSD | Tutto il sistema | ~€150 |
+| Mac Mini M4 Pro 48GB RAM, 512GB SSD | Server principale — CPU+GPU unified memory, MLX per LLM locale, ~5W idle, silenzioso | ~€1.650 |
 | SONOFF ZBDongle-E | Coordinator Zigbee USB | ~€30 |
 | Atom Echo M5Stack ×3-4 | Terminali vocali (futuro) | ~€50 |
-| **Totale** | | **~€230** |
+| **Totale** | | **~€1.730** |
+
+### Perché Mac Mini M4 Pro 48GB
+
+- **Unified memory**: CPU e GPU condividono 48GB — modelli LLM da 30B+ girano senza copiare dati tra CPU/GPU
+- **MLX**: framework Apple ottimizzato per inference su Apple Silicon, usato nativamente da Ollama
+- **5W idle**: server 24/7 con consumo trascurabile — coerente con una casa a surplus solare
+- **Silenzioso**: nessuna ventola GPU, adatto a un ambiente domestico
+- **Capacità LLM**: Qwen3-30B-A3B senza quantizzazione, o due modelli in parallelo (pattern detection + composizione)
+- **Docker**: via OrbStack, supporto nativo ARM per tutti i container dello stack
 
 ---
 
