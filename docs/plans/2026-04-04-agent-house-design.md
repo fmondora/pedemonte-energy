@@ -1,460 +1,476 @@
 # Agent House — Design Document
 
-Data: 2026-04-04
+Data: 2026-04-05
 Branch: `agent-house`
+Revisione: 2 — architettura ispirata a [Block "From Hierarchy to Intelligence"](https://block.xyz/inside/from-hierarchy-to-intelligence)
 
 ## Visione
 
-Sostituire Home Assistant con un sistema di agenti AI autonomi che parlano direttamente con i device della casa, ragionano sullo stato, agiscono, e si espongono via internet attraverso un'interfaccia adattiva. Nessun intermediario — ogni agente conosce i suoi device e comunica con gli altri via MQTT.
+La casa non è un sistema domotico con regole. È un organismo intelligente che osserva, impara, compone soluzioni, e si evolve. L'intelligenza è nel sistema, non nelle regole scritte dall'umano. L'umano è sull'edge — interviene per intuizione, etica, e decisioni che il sistema non deve prendere da solo.
 
-### Ispirazioni
-
-- **[SAGE](https://github.com/SAIC-MONTREAL/SAGE)** (Samsung AI Montreal) — albero dinamico di prompt LLM, comandi persistenti generati come codice, recupero automatico da errori, personalizzazione con memoria a lungo termine
-- **[Smart-Home-Orchestrator](https://github.com/sumukhaAD/Smart-Home-Orchestrator)** — state compression per ridurre i token mandati all'LLM
-- **[home-llm](https://github.com/acon96/home-llm)** — modelli <5B fine-tunati per function calling smart home
+> "Intelligence lives in the system. The people are on the edge."
 
 ---
 
-## Architettura
+## I quattro componenti
+
+Ispirato direttamente dal framework Block:
 
 ```
-                         Internet
-                            │
-                    ┌───────▼────────┐
-                    │  Cloudflare    │
-                    │  Tunnel +      │
-                    │  Workers +     │
-                    │  Access        │
-                    └───────┬────────┘
-                            │
-┌───────────────────────────▼──────────────────────────────────┐
-│                     Mini PC N100 16GB                          │
-│                                                               │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │                    Mosquitto (MQTT)                      │ │
-│  │              Bus di comunicazione tra agenti             │ │
-│  └──┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬───┘ │
-│     │      │      │      │      │      │      │      │      │
-│  ┌──▼──┐┌──▼──┐┌──▼──┐┌──▼──┐┌──▼──┐┌──▼──┐┌──▼──┐┌──▼──┐ │
-│  │Shell││Deye ││Netat││Solar││Zigbe││Ring ││Tesla││Push │ │
-│  │Agent││Agent││Agent││Edge ││Agent││Agent││Agent││Agent│ │
-│  └─────┘└─────┘└─────┘│Agent│└─────┘└─────┘└─────┘└─────┘ │
-│                        └─────┘                               │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │              Orchestratore (cervello)                  │  │
-│  │                                                        │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌───────────────────┐   │  │
-│  │  │ Ollama   │  │ Claude   │  │  Frontend Server  │   │  │
-│  │  │ (locale) │  │ API      │  │  (API JSON +      │   │  │
-│  │  │ frequent │  │ (heavy)  │  │   WebSocket)      │   │  │
-│  │  └──────────┘  └──────────┘  └───────────────────┘   │  │
-│  └───────────────────────────────────────────────────────┘  │
-│                                                               │
-│  ┌──────────────┐  ┌──────────────┐                         │
-│  │  InfluxDB    │  │  SQLite      │                         │
-│  │  (time-series│  │  (config,    │                         │
-│  │   storico)   │  │   utenti,    │                         │
-│  └──────────────┘  │   ruoli)     │                         │
-│                     └──────────────┘                         │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                                                              │
+│   ┌──────────────────────────────────────────────────────┐  │
+│   │                   INTERFACES                          │  │
+│   │   Feed adattivo · Push · Sonos · Alexa · Telegram    │  │
+│   │   (superfici — importanti ma non il valore)          │  │
+│   └──────────────────────────┬───────────────────────────┘  │
+│                              │                               │
+│   ┌──────────────────────────▼───────────────────────────┐  │
+│   │              INTELLIGENCE LAYER                       │  │
+│   │                                                       │  │
+│   │   LangGraph stateful loop (checkpointed)             │  │
+│   │   ┌─────────┐  ┌──────────┐  ┌───────────┐          │  │
+│   │   │ Pattern │→│ Composer  │→│ Evaluator │          │  │
+│   │   │ Detector│  │          │  │           │          │  │
+│   │   └─────────┘  └──────────┘  └───────────┘          │  │
+│   │        ↑              │              │               │  │
+│   │        │              ▼              ▼               │  │
+│   │   ┌────┴──────────────────────────────────┐          │  │
+│   │   │          WORLD MODEL                   │          │  │
+│   │   │   InfluxDB (segnali) + SQLite (stato)  │          │  │
+│   │   │   "Il segnale più onesto è il kWh"     │          │  │
+│   │   └────────────────────────────────────────┘          │  │
+│   └──────────────────────────┬───────────────────────────┘  │
+│                              │                               │
+│   ┌──────────────────────────▼───────────────────────────┐  │
+│   │                  CAPABILITIES                         │  │
+│   │   Primitivi atomici, senza logica, componibili        │  │
+│   │                                                       │  │
+│   │   shelly.turn_on()    deye.get_soc()                 │  │
+│   │   shelly.turn_off()   deye.set_charge_mode()         │  │
+│   │   shelly.get_power()  solaredge.get_power()          │  │
+│   │   zigbee.set_valve()  netatmo.get_climate()          │  │
+│   │   ring.get_snapshot() tesla.set_charge_amps()        │  │
+│   │   sonos.announce()    push.notify()                  │  │
+│   │   velux.set_position() gemini.analyze_image()        │  │
+│   │   gemini.generate_tts()                              │  │
+│   └──────────────────────────────────────────────────────┘  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
 ```
-
-### Tre layer
-
-1. **Device Agents** — ogni agente parla con una famiglia di device, pubblica stato su MQTT, esegue comandi ricevuti via MQTT
-2. **Orchestratore** — consuma tutti i topic MQTT, ragiona (LLM ibrido locale+cloud), genera il feed UI, serve il frontend via JSON API + WebSocket
-3. **Push Agents** — consumano decisioni dall'orchestratore e le traducono in notifiche (mobile, Sonos, Telegram)
-
-### Due database
-
-- **InfluxDB** — serie temporali: surplus, SOC, temperature, consumi. Query tipo "media surplus alle 14 negli ultimi 30 giorni"
-- **SQLite** — configurazione: utenti, ruoli, permessi safe/critical, preferenze
 
 ---
 
-## Device Agents
+## 1. Capabilities
 
-Ogni device agent è un processo Python indipendente che:
-1. Scansiona i device a intervalli regolari (o ascolta eventi)
-2. Pubblica lo stato su topic MQTT standardizzati
-3. Ascolta comandi su topic MQTT dedicati
-4. Scrive metriche in InfluxDB
-5. **Recupero automatico da errori** (ispirato da SAGE): se un comando fallisce, l'agent riprova con strategia alternativa (retry, endpoint diverso, reboot device). Se non riesce, pubblica un errore su `system/agent/{name}/error` e l'orchestratore decide come gestirlo (notifica, fallback, escalation)
+Primitivi atomici. Zero logica. Come i "financial primitives" di Block (payments, lending, cards), le capabilities sono building block componibili. Ognuna fa **una cosa sola** e la fa bene.
 
-### Shelly Agent
+### Principi
 
-- **Protocollo**: HTTP REST locale (`/rpc/` per Gen2, `/settings/` per Gen1)
-- **Device gestiti**:
-  - Shelly Pro DM 2PM ×4 (192.168.86.24, .46, .73, .74) — dimmer con power metering
-  - Shelly Plus 2PM ×2 (192.168.86.37, .42) — switch doppio con power metering
-  - Shelly Plus 1PM (192.168.86.39) — switch singolo con power metering
-  - Shelly 1PM Mini G3 (192.168.86.35) — switch compatto con power metering
-  - ESP8266/Shelly Gen1 (192.168.86.55) — switch legacy
-- **Scan**: ogni 10 secondi, polling HTTP su ogni device
-- **Logica interna**:
-  - Timer spegnimento luci scale (5 min per ogni luce)
-  - Timer spegnimento luci accese da >1 ora
-  - Cron spegnimento zanzare alle 6:00
-- **Topic MQTT**:
-  - `device/shelly/{device_id}/state` — stato (on/off, power, brightness, temperature)
-  - `device/shelly/{device_id}/command` — comandi (turn_on, turn_off, set_brightness)
-  - `device/shelly/{device_id}/energy` — metriche energetiche
-- **InfluxDB**: power per ogni switch ogni 30 secondi
+- **Atomiche**: `shelly.turn_on(device_id)` — non "accendi la luce se è buio e sono le 18"
+- **Senza stato**: non ricordano nulla, non decidono nulla
+- **Componibili**: l'intelligence layer le combina per creare soluzioni
+- **Auto-documentate**: ogni capability dichiara cosa fa, che parametri prende, cosa ritorna
+- **Testabili**: ogni capability ha un health check (`shelly.ping(device_id)`)
 
-### Deye Agent
+### Catalogo capabilities
 
-- **Protocollo**: Deye Cloud API REST (EU endpoint)
-- **Script base**: `scripts/deye_cloud.py` (già funzionante)
-- **Credenziali**: appId, appSecret, email, password in config
-- **Polling**: ogni 5 minuti (rate limit API)
-- **Dati**: SOC, battery_power, grid_power, pv_power, load_power (L1/L2/L3), grid_import/export, battery_charge/discharge, tensioni, temperature
-- **Topic MQTT**:
-  - `device/deye/battery/state` — {soc, power, voltage, charge_energy, discharge_energy}
-  - `device/deye/grid/state` — {power, import_energy, export_energy, daily_import, daily_export}
-  - `device/deye/load/state` — {power_total, power_l1, power_l2, power_l3}
-  - `device/deye/pv/state` — {power}
-- **InfluxDB**: tutti i datapoint ogni 5 minuti
+#### Energia
 
-### SolarEdge Agent
+| Capability | Cosa fa | Protocollo |
+|---|---|---|
+| `deye.get_state()` | SOC, power, grid, PV, load per fase | Deye Cloud API |
+| `deye.set_charge_mode(mode)` | Selling First, Load First, Grid Charge | Deye Cloud API |
+| `deye.set_charge_time(start, end, days)` | Programma ricarica da rete | Deye Cloud API |
+| `solaredge.get_power()` | Produzione PV corrente | SolarEdge API |
+| `solaredge.get_daily_energy()` | Energia giornaliera prodotta | SolarEdge API |
+| `solaredge.get_evcharger()` | Stato ricarica EV | SolarEdge API |
 
-- **Protocollo**: SolarEdge Monitoring API REST
-- **Credenziali**: API key + site ID
-- **Polling**: ogni 15 secondi (produzione PV), ogni 15 minuti (EV charger)
-- **Dati**: produzione corrente, energia giornaliera/lifetime, stato EV charger
-- **Topic MQTT**:
-  - `device/solaredge/inverter/state` — {current_power, daily_energy, lifetime_energy}
-  - `device/solaredge/evcharger/state` — {status, power, session_energy}
-- **InfluxDB**: produzione PV ogni 15 secondi
+#### Switch e luci
 
-### Netatmo Agent
+| Capability | Cosa fa | Protocollo |
+|---|---|---|
+| `shelly.turn_on(device_id)` | Accendi switch/dimmer | HTTP REST LAN |
+| `shelly.turn_off(device_id)` | Spegni switch/dimmer | HTTP REST LAN |
+| `shelly.set_brightness(device_id, level)` | Regola dimmer 0-100 | HTTP REST LAN |
+| `shelly.get_state(device_id)` | Stato + power corrente | HTTP REST LAN |
+| `shelly.get_power(device_id)` | Solo power in W | HTTP REST LAN |
+| `shelly.list_devices()` | Scan rete, lista tutti gli Shelly | HTTP REST LAN |
 
-- **Protocollo**: Netatmo API OAuth2
-- **Credenziali**: client_id, client_secret, refresh_token (da dev portal Netatmo)
-- **Polling**: ogni 5 minuti
-- **Stazioni**:
-  - "Michele" — modulo esterno (temp, umidità, pressione, pioggia, vento)
-  - "Via Pedemonte 425 berbenno" — modulo interno (temp, umidità, pressione, CO2)
-- **Topic MQTT**:
-  - `device/netatmo/{station}/state` — {temperature, humidity, pressure, co2, rain, wind_speed}
-- **InfluxDB**: tutti i sensori ogni 5 minuti
+#### Clima
 
-### Zigbee Agent
+| Capability | Cosa fa | Protocollo |
+|---|---|---|
+| `netatmo.get_climate(station)` | Temp, umidità, pressione, CO2, pioggia, vento | Netatmo API |
+| `zigbee.get_temperature(device_id)` | Temperatura sensore | zigbee2mqtt/MQTT |
+| `zigbee.set_valve(device_id, position)` | Regola valvola termostatica 0-100 | zigbee2mqtt/MQTT |
+| `zigbee.get_contact(device_id)` | Stato sensore porta/finestra | zigbee2mqtt/MQTT |
+| `velux.set_position(window_id, pos)` | Apri/chiudi finestra/tapparella | pyvlx LAN |
 
-- **Protocollo**: zigbee2mqtt (coordinator USB → MQTT)
-- **Coordinator**: SONOFF ZBDongle-E o Conbee III
-- **Device gestiti**: valvole termostatiche, sensori porta/finestra, sensori temperatura, button
-- **Topic MQTT**: zigbee2mqtt pubblica direttamente su MQTT — l'agent traduce i topic in formato standard:
-  - `device/zigbee/{device_id}/state` — dati sensore
-  - `device/zigbee/{device_id}/command` — comandi attuatori
-- **InfluxDB**: temperatura per stanza ogni 5 minuti
+#### Sicurezza
 
-### Ring Agent
+| Capability | Cosa fa | Protocollo |
+|---|---|---|
+| `ring.get_last_motion()` | Ultimo evento motion con timestamp | Ring API |
+| `ring.get_snapshot()` | Scatta e ritorna snapshot | Ring API |
+| `gemini.analyze_image(image, prompt)` | Analisi Vision (garage aperto?) | Gemini API |
+| `shelly.toggle_garage()` | Toggle relè garage (1s pulse) | HTTP REST LAN |
 
-- **Protocollo**: Ring API non ufficiale (ring-client-api)
-- **Device**: Ring Doorbell (front door)
-- **Polling**: event-driven (webhook o polling eventi ogni 30 sec)
-- **Logica interna**:
-  - Motion detection → snapshot → analisi Gemini Vision (garage aperto?)
-  - Cooldown 10 minuti tra detection
-  - Solo 07:00-23:00
-- **Topic MQTT**:
-  - `device/ring/front_door/motion` — evento motion con timestamp
-  - `device/ring/front_door/snapshot` — path immagine salvata
-  - `device/ring/garage/state` — {open: true/false, confidence: 0.0-1.0}
-- **InfluxDB**: eventi motion
+#### Trasporto
 
-### Tesla Agent
+| Capability | Cosa fa | Protocollo |
+|---|---|---|
+| `tesla.get_state()` | SOC, stato ricarica, km, is_home | Tesla Fleet API |
+| `tesla.set_charge_amps(amps)` | Regola corrente ricarica | Tesla Fleet API |
+| `tesla.start_charging()` | Avvia ricarica | Tesla Fleet API |
+| `tesla.stop_charging()` | Ferma ricarica | Tesla Fleet API |
 
-- **Protocollo**: Tesla Fleet API
-- **Device**: Tesla "Biancaneve"
-- **Polling**: ogni 15 minuti (per non svegliare l'auto inutilmente)
-- **Logica interna**:
-  - Regolazione ricarica solare: legge produzione da SolarEdge (via MQTT), calcola ampere (produzione / 690), applica soglie (avvio 4200W / stop 3500W)
-- **Topic MQTT**:
-  - `device/tesla/biancaneve/state` — {soc, charging_state, charge_amps, range_km, is_home}
-  - `device/tesla/biancaneve/command` — {set_charge_amps, start_charging, stop_charging}
-- **InfluxDB**: SOC e stato ricarica ogni 15 minuti
+#### Output (interfacce push)
 
-### Velux Agent
+| Capability | Cosa fa | Protocollo |
+|---|---|---|
+| `sonos.announce(speaker, audio_file)` | Annuncio con overlay | SoCo HTTP LAN |
+| `sonos.play_ding(speaker)` | Suono ding | SoCo HTTP LAN |
+| `push.notify(user, title, body, actions)` | Push mobile con azioni | ntfy |
+| `telegram.send(user, text, image)` | Messaggio Telegram | Bot API |
+| `gemini.tts(text, voice)` | Genera audio MP3 da testo | Gemini TTS API |
 
-- **Protocollo**: pyvlx (libreria Python, comunicazione LAN con KLF 200)
-- **Device**: finestre/tapparelle Velux
-- **Topic MQTT**:
-  - `device/velux/{window_id}/state` — {position: 0-100, rain_sensor}
-  - `device/velux/{window_id}/command` — {set_position, open, close}
+### Implementazione
+
+Ogni capability è una **funzione Python asincrona** con:
+- Tipo di ritorno dichiarato
+- Retry automatico (max 3, backoff esponenziale)
+- Timeout configurabile
+- Health check
+- Logging su MQTT `system/capability/{name}/call`
+
+```python
+# Esempio — NON implementazione, solo interfaccia
+@capability(
+    name="shelly.turn_on",
+    description="Accende uno switch o dimmer Shelly",
+    params={"device_id": "ID del device Shelly"},
+    returns="bool — True se riuscito",
+    retry=3,
+    timeout=5
+)
+async def shelly_turn_on(device_id: str) -> bool:
+    ...
+```
+
+L'intelligence layer vede il catalogo capabilities come un set di **tool LLM** — esattamente come Claude vede i suoi tool. Ogni capability è un tool con nome, descrizione, parametri, e tipo di ritorno.
 
 ---
 
-## Orchestratore
+## 2. World Model
 
-Il cervello del sistema. È un processo Python che:
+Il world model è il cuore del sistema. Come in Block ("money is the most honest signal"), qui il segnale più onesto è il **kWh** e il **comportamento osservato**.
 
-### 1. Consuma stato da MQTT
+### Cosa contiene
 
-Si iscrive a `device/#` e mantiene un **state store in memoria** con lo stato corrente di tutti i device. Ogni cambiamento di stato viene valutato.
+#### Segnali real-time (MQTT state store in memoria)
 
-**State compression** (ispirato da Smart-Home-Orchestrator): prima di mandare il contesto all'LLM, lo stato viene compresso in formato token-efficiente. Invece di mandare il JSON completo di tutti i device (~decine di kB), un algoritmo produce un sommario compatto:
+Stato corrente di ogni device, aggiornato in continuo. È una foto istantanea della casa.
 
-```
-ENERGY: pv=5.2kW grid=-3.1kW soc=98% load=2.1kW(L1:0.9 L2:0.8 L3:0.4)
-CLIMATE: soggiorno=21.5°/45% camera=19.8°/50% ext=15.2°/60% rain=0
-LIGHTS: scale=ON(5min) cucina=OFF garage=OFF rooftop=OFF
-SECURITY: garage_door=closed ring_last_motion=2h_ago
-TESLA: soc=65% charging=no home=yes
-```
+#### Segnali storici (InfluxDB)
 
-Riduzione ~70% dei token, l'LLM ragiona sulla stessa informazione con costi e latenza molto inferiori.
+| Categoria | Segnali | Frequenza |
+|---|---|---|
+| Energia Deye | SOC, battery_power, grid_power, load (L1/L2/L3), import/export | 5 min |
+| Energia SolarEdge | PV power, daily/lifetime energy | 15 sec |
+| Consumi per device | Power per ogni Shelly con metering | 30 sec |
+| Clima | Temp/umidità per stanza e esterno, CO2, pioggia, vento | 5 min |
+| Sicurezza | Motion events, stato sensori porta | evento |
+| Tesla | SOC, stato ricarica, posizione | 15 min |
+| Interazioni utente | Azioni accettate/rifiutate, trigger creati/modificati | evento |
 
-### 2. Ragiona con LLM ibrido
+#### Profili comportamentali (SQLite)
 
-**Ollama locale (Qwen3-30B-A3B)** — decisioni frequenti e leggere:
-- Ogni 10 secondi: "lo stato è cambiato? devo aggiornare il feed?"
-- Pattern matching rapido: surplus salito, luce accesa da troppo, temperatura anomala
-- Latenza: <2 secondi
+Non "preferenze dichiarate" ma **comportamento osservato**:
 
-**Claude API (Haiku/Sonnet)** — ragionamento pesante e raro:
-- Una volta al giorno (mattina): "strategia energetica per oggi" basata su forecast meteo, storico consumi, prezzi energia
-- Su eventi significativi: "il garage è aperto da 2 ore, piove, e nessuno è in casa — che faccio?"
-- Analisi anomalie: "consumo notturno 800W quando di solito sono 200W"
+- "Francesco alza il termostato quando scende sotto 22°C" (non "Francesco preferisce 22°C")
+- "La lavatrice gira il lunedì e il giovedì tra le 9 e le 11"
+- "Lucia accende le luci cucina alle 6:45 nei giorni feriali"
+- "Consumo base notturno: 180W. Se supera 400W, qualcosa è rimasto acceso"
+- "Il sabato pomeriggio c'è un 60% di probabilità che Francesco accenda la sauna"
 
-### 2b. Albero decisionale dinamico (ispirato da SAGE)
+Questi profili vengono **aggiornati automaticamente** dall'intelligence layer:
+- Sommari giornalieri → sommari settimanali → profilo globale
+- Decay: pattern vecchi perdono peso, pattern recenti dominano
 
-L'orchestratore NON ha logiche if/else hardcodate. Per ogni situazione, l'LLM costruisce un **albero di decisioni**:
+#### Stato della casa (SQLite)
 
-```
-Evento: surplus 5kW, SOC 98%, ore sole 3h
-    │
-    ├─ LLM: "Cosa posso suggerire?"
-    │   ├─ Controlla stato Tesla → SOC 65%, a casa → suggerisci ricarica
-    │   ├─ Controlla orario → 15:30, sabato → sauna possibile
-    │   └─ Controlla storico → Francesco accende sauna il sabato 2/3 volte
-    │
-    ├─ LLM: "Che priorità?"
-    │   └─ Tesla prima (accumula energia), sauna dopo (consuma subito)
-    │
-    └─ LLM: "Come comunico?"
-        ├─ Feed: energy_card con azioni
-        ├─ Push: notifica Francesco
-        └─ Sonos: annuncio surplus
-```
+| Dato | Esempio |
+|---|---|
+| Utenti | Francesco (admin), Lucia (family), Anna (limited), Vicki (limited) |
+| Zone | Cucina, soggiorno, camere, garage, rooftop, cantina, spa |
+| Device → zona mapping | shelly_24 → cucina, shelly_46 → soggiorno |
+| Classificazione azioni | safe/critical per capability per utente |
+| Trigger persistenti | Regole linguaggio naturale → codice generato |
 
-Ogni nodo dell'albero è una chiamata LLM che valuta il contesto e decide il passo successivo. L'albero è diverso ogni volta, perché il contesto è diverso.
+### Il world model come contesto LLM
 
-### 2c. Comandi persistenti (ispirato da SAGE)
-
-L'utente può creare **regole in linguaggio naturale** che l'orchestratore traduce in trigger monitorati:
+Prima di ogni chiamata LLM, il world model viene **compresso** in formato token-efficiente:
 
 ```
-Utente: "Quando la batteria è piena e c'è surplus, accendi la sauna automaticamente il sabato"
-
-Orchestratore:
-1. LLM genera codice di verifica:
-   def check(): return soc >= 98 and surplus > 3 and weekday == 5 and 14 <= hour <= 20
-2. Il trigger viene salvato in SQLite
-3. Ad ogni ciclo, l'orchestratore valuta i trigger attivi
-4. Quando scatta: esegue l'azione (con livello safe/critical appropriato)
+ENERGY: pv=5.2kW grid=-3.1kW(exporting) soc=98% load=2.1kW trend=↓
+CLIMATE: soggiorno=21.5°/45% camera=19.8°/50% ext=15.2° rain=0 wind=3km/h
+LIGHTS: scale=ON(5min) cucina=OFF 6_devices_off
+SECURITY: all_clear ring_last=2h_ago garage=closed
+TESLA: soc=65% not_charging home=yes
+PATTERNS: saturday_afternoon sauna_probability=60% surplus_duration=2h
+USER: francesco(admin) last_active=5min_ago
+FAILURES: none
 ```
 
-I trigger persistenti sostituiscono le automazioni YAML di HA. Il vantaggio: l'utente li crea con linguaggio naturale, l'LLM li traduce in codice, e l'orchestratore li esegue. Possono essere modificati, disattivati, o eliminati dal frontend.
+~200 token per descrivere l'intera casa. L'LLM ragiona su questo, non su kB di JSON.
 
-### 2d. Personalizzazione e memoria (ispirato da SAGE)
+---
 
-L'orchestratore accumula **preferenze e pattern** dagli utenti:
+## 3. Intelligence Layer
 
-**Memoria a breve termine** (state store in memoria):
-- Stato corrente di tutti i device
-- Azioni recenti (ultime 24h)
+Non un orchestratore. Un **compositore** che vede pattern e compone soluzioni da capabilities atomiche.
 
-**Memoria a lungo termine** (InfluxDB + SQLite):
-- Pattern comportamentali: "Francesco accende la sauna il sabato pomeriggio"
-- Feedback su suggerimenti: "ha accettato 8/10 suggerimenti surplus ma mai quello della lavastoviglie"
-- Profili giornalieri: "nei giorni lavorativi consumo medio 1.2kW, nel weekend 2.8kW"
-- Anomalie passate e come sono state risolte
+### Architettura: LangGraph stateful loop
 
-**Profili utente gerarchici** (ispirato da SAGE):
-- Sommari giornalieri: "oggi Francesco ha acceso la sauna alle 16, spento luci manualmente 3 volte"
-- Sommari settimanali: aggregazione automatica
-- Profilo globale: preferenze consolidate usate dall'LLM per decisioni proattive
+```
+                    ┌─────────────────────┐
+                    │   Observe           │
+                    │   (leggi world      │
+                    │    model changes)   │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │   Detect            │
+                    │   (pattern match    │
+                    │    + anomalie)      │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+              ┌─────│   Compose           │
+              │     │   (LLM: quale       │
+              │     │    soluzione?)       │
+              │     └──────────┬──────────┘
+              │                │
+              │     ┌──────────▼──────────┐
+              │     │   Act               │
+              │     │   (esegui           │
+              │     │    capabilities)    │
+              │     └──────────┬──────────┘
+              │                │
+              │     ┌──────────▼──────────┐
+              │     │   Evaluate          │
+              └─────│   (ha funzionato?   │
+             retry  │    aggiorna world   │
+                    │    model)           │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │   Present           │
+                    │   (genera feed UI   │
+                    │    + push)          │
+                    └──────────┬──────────┘
+                               │
+                               └──────→ loop continuo
+```
 
-Il prompt dell'orchestratore include sempre il profilo dell'utente attivo, permettendo decisioni personalizzate: "Francesco preferisce che le luci si spengano da sole, Lucia le spegne manualmente" → per Francesco l'orchestratore è proattivo, per Lucia suggerisce ma non agisce.
+Ogni nodo è checkpointed su PostgreSQL. Il grafo sopravvive ai restart.
 
-### 3. Genera il feed UI
+### Nodo Observe
 
-L'orchestratore produce un **array JSON di componenti** ordinati per priorità. Il frontend li renderizza.
+Legge i cambiamenti dal world model (MQTT + InfluxDB). Produce un diff: "cosa è cambiato dall'ultimo ciclo?"
 
-Tipi di componente:
-
-```json
-[
-  {
-    "type": "alert",
-    "severity": "high",
-    "title": "Garage aperto",
-    "body": "Da 32 minuti. Piove.",
-    "actions": [
-      {"label": "Chiudi garage", "action": "garage_close", "level": "critical"}
-    ],
-    "icon": "garage-open",
-    "timestamp": "2026-04-04T18:30:00Z"
-  },
-  {
-    "type": "energy_card",
-    "surplus_kw": 4.2,
-    "soc": 98,
-    "grid_power": -3100,
-    "pv_power": 5200,
-    "load_power": 2100,
-    "suggestion": "Ottimo momento per la lavatrice",
-    "actions": [
-      {"label": "Accendi sauna", "action": "sauna_on", "level": "critical"}
-    ]
-  },
-  {
-    "type": "climate_card",
-    "rooms": [
-      {"name": "Soggiorno", "temp": 21.5, "humidity": 45, "target": 22},
-      {"name": "Camera", "temp": 19.8, "humidity": 50, "target": 20}
-    ]
-  },
-  {
-    "type": "status",
-    "severity": "ok",
-    "title": "Casa tutto ok",
-    "body": "Nessun problema rilevato",
-    "icon": "home-check"
-  },
-  {
-    "type": "insight",
-    "title": "Oggi hai risparmiato €2.40",
-    "body": "Autoconsumo al 87%. Ieri era 72%.",
-    "chart_ref": "daily_savings"
-  }
+```
+changes: [
+  {signal: "deye.soc", from: 95, to: 98, delta: +3},
+  {signal: "shelly.scale.state", from: "off", to: "on", duration: null},
+  {signal: "solaredge.pv_power", from: 4800, to: 5200, trend: "rising"}
 ]
 ```
 
-### 4. Gestisce azioni
+### Nodo Detect
 
-Quando l'utente preme un bottone nel feed:
+Due modalità:
 
+**LLM locale (Ollama, frequente)** — pattern matching veloce:
+- "SOC salito sopra 95% con surplus crescente" → pattern: battery_full_surplus
+- "Luce scale accesa" → pattern: staircase_timer_start
+- "Consumo notturno anomalo" → pattern: anomaly_consumption
+
+**Claude API (raro, su pattern complessi)**:
+- "Da 3 giorni il consumo serale è 30% più alto del normale" → analisi profonda
+- "Il forecast meteo dice pioggia per 3 giorni" → pianificazione strategica
+
+### Nodo Compose
+
+Il cuore. L'LLM riceve:
+- Il pattern rilevato
+- Il world model compresso
+- Il catalogo capabilities disponibili
+- I profili comportamentali degli utenti
+- I trigger persistenti attivi
+
+E compone una **soluzione** — una sequenza di capabilities da eseguire:
+
+```json
+{
+  "pattern": "battery_full_surplus",
+  "reasoning": "SOC 98%, surplus 5.2kW, sabato pomeriggio. Francesco accende la sauna il 60% dei sabati. Tesla a casa con SOC 65%.",
+  "solution": [
+    {"capability": "push.notify", "args": {"user": "francesco", "title": "Surplus 5.2kW", "body": "Batteria piena. Buon momento per la sauna o collegare Tesla.", "actions": [{"label": "Accendi sauna", "action": "sauna_on"}, {"label": "OK", "action": "dismiss"}]}},
+    {"capability": "sonos.play_ding", "args": {"speaker": "family_room"}},
+    {"capability": "gemini.tts", "args": {"text": "Good afternoon. 5.2 kilowatts of surplus available, battery fully charged. An excellent time for the sauna or to charge your Tesla."}},
+    {"capability": "sonos.announce", "args": {"speaker": "family_room", "audio_file": "/tmp/surplus.mp3"}}
+  ],
+  "level": "safe",
+  "auto_execute": true
+}
 ```
-Frontend → WebSocket → Orchestratore
-    │
-    ├─ Verifica ruolo utente (SQLite)
-    ├─ Verifica livello azione (safe/critical)
-    │   ├─ safe → esegue subito via MQTT command
-    │   └─ critical →
-    │       ├─ utente admin (Francesco) → esegue subito
-    │       └─ altri utenti → push conferma, aspetta risposta
-    └─ Log azione in InfluxDB
+
+Ma anche soluzioni che **nessuno ha chiesto**:
+
+```json
+{
+  "pattern": "recurring_evening_drain",
+  "reasoning": "Da 3 martedì consecutivi, consumo 18-20 sale a 3kW e mercoledì mattina SOC sotto 30%. Imposto carica notturna automatica.",
+  "solution": [
+    {"capability": "deye.set_charge_time", "args": {"start": "02:00", "end": "06:00", "days": ["tue", "thu"]}},
+    {"capability": "push.notify", "args": {"user": "francesco", "title": "Nuova ottimizzazione", "body": "Ho notato consumi alti martedì/giovedì sera. Ho aggiunto carica notturna per avere batteria piena mercoledì. Va bene?", "actions": [{"label": "OK", "action": "confirm"}, {"label": "Annulla", "action": "revert"}]}}
+  ],
+  "level": "critical",
+  "auto_execute": false
+}
 ```
 
-### 5. Serve il frontend
+### Nodo Act
 
-- **HTTP server** (FastAPI o simile) per API JSON + file statici frontend
-- **WebSocket** per aggiornamenti real-time del feed
-- Endpoint:
-  - `GET /api/feed` — feed corrente per l'utente autenticato
-  - `WS /api/ws` — stream aggiornamenti feed
-  - `POST /api/action` — esegui azione
-  - `GET /api/history/{metric}` — dati storici da InfluxDB
-  - `GET /api/config` — configurazione utente (ruolo, permessi)
-  - `GET /api/triggers` — lista trigger persistenti dell'utente
-  - `POST /api/triggers` — crea trigger in linguaggio naturale (l'LLM lo traduce in codice)
-  - `DELETE /api/triggers/{id}` — elimina trigger
-  - `PATCH /api/triggers/{id}` — abilita/disabilita trigger
+Esegue la sequenza di capabilities. Ogni esecuzione:
+- Verifica il livello (safe/critical) e il ruolo utente
+- Se critical e non admin: aspetta conferma (con timeout e default sicuro)
+- Logga su InfluxDB e MQTT
+- Gestisce errori con retry + strategia alternativa
+
+### Nodo Evaluate
+
+Dopo l'esecuzione, valuta:
+- L'azione è riuscita? (capability ha ritornato successo?)
+- L'effetto atteso si è verificato? (es. dopo `shelly.turn_off`, il power è sceso a 0?)
+- Se no: riprova con strategia diversa o escalation
+
+Aggiorna il world model con il risultato.
+
+### Nodo Present
+
+Produce il feed UI come array JSON di componenti, ordinati per priorità dall'LLM:
+
+```json
+[
+  {"type": "alert", "severity": "high", "title": "...", "actions": [...]},
+  {"type": "energy_card", "surplus_kw": 5.2, "soc": 98, ...},
+  {"type": "insight", "title": "Oggi hai risparmiato €2.40", ...},
+  {"type": "trigger_card", "description": "Carica notturna mar/gio", "status": "pending_approval"}
+]
+```
+
+Il feed viene pushato via WebSocket a tutti i frontend connessi, filtrato per ruolo utente.
+
+### Failure signals → roadmap
+
+Come in Block: quando l'intelligence layer **non può comporre una soluzione**, genera un failure signal che diventa una proposta:
+
+```json
+{
+  "type": "failure_signal",
+  "pattern": "camera_ragazze_no_temperature",
+  "reasoning": "Non posso ottimizzare il comfort in camera ragazze perché non ho un sensore di temperatura. Le valvole girano alla cieca.",
+  "proposal": {
+    "what": "Aggiungere sensore temperatura Zigbee in camera ragazze",
+    "cost": "~€15",
+    "benefit": "Stimo risparmio €3-5/mese con regolazione precisa valvola",
+    "capabilities_unlocked": ["zigbee.get_temperature(camera_ragazze)"]
+  }
+}
+```
+
+Il sistema ti dice cosa gli manca, perché, quanto costa, e cosa guadagni. La roadmap della casa si auto-genera.
 
 ---
 
-## Push Agent
+## 4. Interfaces
 
-Processo Python che ascolta topic MQTT dall'orchestratore e traduce in notifiche.
+Le superfici attraverso cui il sistema interagisce con gli umani. Importanti ma **non il centro di valore** — il valore è nel world model e nell'intelligence layer.
 
-### Canali
+### Feed adattivo (web)
 
-| Canale | Libreria/Protocollo | Uso |
-|---|---|---|
-| **ntfy** | HTTP POST a ntfy.sh (o self-hosted) | Push mobile iOS/Android, azioni |
-| **Sonos** | SoCo (HTTP locale) | Annunci vocali (ding + TTS) |
-| **Telegram** | Bot API | Messaggi testo + foto (snapshot Ring) |
-| **Alexa** | Alexa Smart Home Skill (futuro) | Annunci multi-room |
+- **React/Preact + TypeScript**, PWA installabile
+- **WebSocket** per aggiornamenti real-time
+- **Pagina singola adattiva** — il feed si ricompone in base al contesto
+- L'intelligence layer decide cosa mostrare, in che ordine, con che priorità
 
-### Topic MQTT consumati
+Componenti UI (set fisso, ben progettati):
 
-- `orchestrator/push/notify` — {channel, user, title, body, actions, priority}
-- `orchestrator/push/announce` — {speaker, text, audio_file}
+| Componente | Uso |
+|---|---|
+| `AlertCard` | Situazioni urgenti |
+| `EnergyCard` | Stato energetico con gauge e grafici |
+| `ClimateCard` | Temperature per stanza con target |
+| `ActionButton` | Bottone contestuale |
+| `StatusBadge` | "Casa tutto ok" |
+| `InsightCard` | Pattern rilevati, consigli, risparmi |
+| `ChartCard` | Grafici storici da InfluxDB |
+| `TriggerCard` | Trigger persistente con stato e azioni |
+| `FailureCard` | Proposta roadmap (cosa manca al sistema) |
+| `NaturalInput` | Campo per creare regole in linguaggio naturale |
 
-### Gemini TTS
+### Push (mobile)
 
-Lo script `generate_surplus_announcement.py` viene riutilizzato dal push-agent per generare annunci vocali dinamici. Il push-agent:
-1. Riceve richiesta annuncio dall'orchestratore
-2. Chiama Gemini TTS per generare mp3
-3. Invia mp3 al Sonos via SoCo
+- **ntfy** per push iOS/Android con azioni
+- Azioni actionable: l'utente risponde direttamente dalla notifica
+
+### Sonos (voce)
+
+- **SoCo** per annunci sulla Soundbar e SpaMusic
+- **Gemini TTS** per annunci dinamici (stile treno inglese)
+- Ding + annuncio con `announce: true` (overlay su musica)
+
+### Telegram
+
+- Bot per messaggi testo + foto (snapshot Ring, grafici)
+
+### Alexa (futuro)
+
+- Smart Home Skill per annunci multi-room
 
 ---
 
 ## Utenti e Ruoli
 
-### Tabella utenti (SQLite)
+### Chi sono
 
-| Utente | Ruolo | Push channels | Critical senza conferma | Zone luci |
-|---|---|---|---|---|
-| Francesco | admin | ntfy (Clancy), Telegram | Sì, tutte | Tutte |
-| Lucia | family | ntfy (iPhone Lucia) | No | Tutte |
-| Anna | limited | — | No | Camera Anna, bagno, scale |
-| Vicki | limited | — | No | Camera Vicki, bagno, scale |
+| Utente | Ruolo | Vede nel feed | Azioni safe | Azioni critical | Push |
+|---|---|---|---|---|---|
+| Francesco | admin | Tutto + failure signals + config | Tutte | Tutte (senza conferma) | ntfy (Clancy) + Telegram |
+| Lucia | family | Energia (vista), clima, comfort, garage | Luci, temperatura, scene | Garage (con conferma) | ntfy (iPhone Lucia) |
+| Anna | limited | Comfort, garage | Luci sua zona, scene | Garage (con conferma) | — |
+| Vicki | limited | Comfort, garage | Luci sua zona, scene | Garage (con conferma) | — |
 
 ### Autenticazione
 
-- **Cloudflare Access** gestisce l'auth: email OTP o Google login
-- L'email autenticata viene mappata al ruolo in SQLite
-- Il WebSocket riceve il token Cloudflare e identifica l'utente
-- Nessuna gestione password nel sistema
+- **Cloudflare Access**: email OTP, zero password
+- Email → ruolo mappato in SQLite
+- Token JWT nel WebSocket identifica l'utente
 
-### Livelli azione
+### Safe vs Critical
 
 | Livello | Comportamento | Esempi |
 |---|---|---|
-| **safe** | Esecuzione immediata, nessuna notifica | Spegni luce, regola dimmer, cambia temperatura |
-| **critical** | Admin: esegue subito. Altri: push conferma con timeout | Garage open/close, sauna on, azioni costose |
+| **safe** | Esecuzione immediata | Spegni luce, regola dimmer, leggi sensore |
+| **critical** | Admin: esegue. Altri: conferma push con timeout | Garage, sauna, carica da rete, azioni costose |
 
-Timeout e default per azioni critical:
-- Garage aperto da >2h senza risposta → chiude (default sicuro)
-- Sauna senza risposta in 10 min → non accende (default sicuro)
-- La classificazione safe/critical è configurabile per utente in SQLite
-
----
-
-## Frontend
-
-### Stack
-
-- **React** (o Preact per leggerezza) + TypeScript
-- **WebSocket** per aggiornamenti real-time
-- **PWA** — installabile su iOS/Android come app
-- Build statico servito da FastAPI o Cloudflare Workers
-
-### Componenti UI (set fisso, ben progettati)
-
-| Componente | Uso |
-|---|---|
-| `AlertCard` | Situazioni urgenti (garage aperto, anomalia consumo) |
-| `EnergyCard` | Stato energetico: surplus, SOC, grid, PV, con gauge/grafici |
-| `ClimateCard` | Temperature per stanza con target |
-| `ActionButton` | Bottone contestuale (accendi sauna, chiudi garage) |
-| `StatusBadge` | "Casa tutto ok" o indicatore stato |
-| `InsightCard` | Consigli e statistiche dall'LLM |
-| `ChartCard` | Grafici storici (produzione, consumi, SOC) |
-| `DeviceCard` | Stato singolo device con controllo diretto |
-| `TriggerCard` | Trigger persistente: descrizione naturale, stato on/off, ultime esecuzioni |
-| `NaturalInput` | Campo testo per creare trigger/regole in linguaggio naturale |
-
-L'orchestratore compone il feed come un array ordinato di questi componenti. Il frontend li renderizza in un layout verticale (mobile-first) o grid (desktop).
-
-### Responsive
-
-- **Mobile** (via Cloudflare, PWA): layout verticale, feed scrollabile
-- **Desktop**: grid 2-3 colonne, feed + pannello laterale con dettagli
-- **Atom Echo / terminali vocali**: nessun frontend visuale, solo push-agent
+Default sicuri sui timeout:
+- Garage aperto da >2h → chiude
+- Sauna non confermata in 10 min → non accende
+- Classificazione configurabile per utente
 
 ---
 
@@ -462,106 +478,39 @@ L'orchestratore compone il feed come un array ordinato di questi componenti. Il 
 
 ### Cloudflare Tunnel
 
-- Il mini PC N100 esegue `cloudflared` che apre un tunnel persistente
-- Nessuna porta aperta sul router, nessun port forwarding
+- `cloudflared` sul mini PC, tunnel persistente
+- Zero porte aperte sul router
 - Dominio: `casa.pedemonte.it` (o simile)
 
 ### Cloudflare Access
 
 - Policy per email: francesco@*, lucia@*, anna@*, vicki@*
-- Auth via email OTP (zero password da gestire)
-- Token JWT passato al backend per identificare l'utente
+- Auth via email OTP
 
 ### Cloudflare Workers
 
-- **Cache**: il feed JSON viene cachato per 5 secondi sull'edge (riduce latenza per utenti fuori casa)
-- **Rate limiting**: protezione contro abusi
-- **Asset serving**: file statici frontend serviti dall'edge Cloudflare (velocissimo)
-- **Fallback page**: se il tunnel è down, mostra "casa offline" invece di un errore
+- Cache feed JSON sull'edge (5 sec)
+- Rate limiting
+- Asset serving frontend
+- Fallback "casa offline" se tunnel down
 
 ---
 
-## Migrazione da HA
+## Il loop di feedback (flywheel)
 
-### Fase 1 — Coesistenza (MVP)
-
-HA resta attivo. Gli agent girano in parallelo e leggono gli stessi device. Il frontend Agent House è accessibile via Cloudflare. Si valida che gli agent leggano correttamente e che il feed sia utile.
-
-### Fase 2 — Migrazione automazioni
-
-Le automazioni vengono migrate una alla volta da HA agli agent. Ogni automazione migrata viene disattivata in HA. Si parte dalle più semplici (timer luci) e si arriva alle più complesse (surplus advisor).
-
-### Fase 3 — Spegnimento HA
-
-Quando tutte le automazioni sono migrate e validate, HA viene spento. Il coordinator Zigbee USB viene spostato dal Green al mini PC N100. Il Green viene ritirato.
-
-### Device già pronti per la migrazione
-
-| Device | Pronto? | Note |
-|---|---|---|
-| Shelly (tutti) | ✅ | API HTTP locale verificata, nessuna dipendenza HA |
-| Deye | ✅ | Script Python già funzionante |
-| SolarEdge | ⚠️ | Serve API key dal portale SolarEdge |
-| Netatmo | ⚠️ | Servono credenziali OAuth2 dal dev portal |
-| Ring | ⚠️ | API non ufficiale, da validare |
-| Zigbee | ⚠️ | Serve coordinator USB + setup zigbee2mqtt |
-| Tesla | ⚠️ | Serve setup Tesla Fleet API |
-| Velux | ⚠️ | Da validare pyvlx standalone |
-| Sonos | ✅ | SoCo funziona standalone |
-
----
-
-## MQTT Topic Convention
+Come il flywheel di Block ("richer signal → better model → more transactions → richer signal"):
 
 ```
-device/{family}/{device_id}/state      # stato pubblicato dal device agent
-device/{family}/{device_id}/command    # comandi ricevuti dal device agent
-device/{family}/{device_id}/energy     # metriche energetiche
-
-orchestrator/feed                      # feed JSON corrente
-orchestrator/feed/update               # delta update feed
-orchestrator/decision                  # decisioni prese dall'orchestratore
-orchestrator/push/notify               # richiesta notifica al push-agent
-orchestrator/push/announce             # richiesta annuncio vocale
-
-orchestrator/trigger/create             # nuovo trigger persistente (da frontend)
-orchestrator/trigger/fired              # trigger scattato
-orchestrator/trigger/status             # stato trigger attivi
-
-system/agent/{agent_name}/status       # heartbeat e stato di ogni agente
-system/agent/{agent_name}/log          # log operativo
-system/agent/{agent_name}/error        # errore device con contesto per recovery
+Più segnali dai device
+    → world model più ricco
+        → pattern detection più accurata
+            → soluzioni composte più intelligenti
+                → utente accetta più spesso
+                    → più feedback nel world model
+                        → loop continuo
 ```
 
----
-
-## Gestione Errori e Resilienza
-
-### Device agent: retry con escalation
-
-Ogni device agent gestisce errori in 3 livelli:
-
-1. **Retry locale** — riprova la stessa operazione (max 3 volte, backoff esponenziale)
-2. **Strategia alternativa** — prova un endpoint diverso o un comando equivalente (es. Shelly Gen2 `/rpc/Switch.Set` fallisce → prova `/relay/0?turn=on` Gen1 style)
-3. **Escalation all'orchestratore** — pubblica su `system/agent/{name}/error` con contesto. L'orchestratore decide:
-   - Notifica all'admin
-   - Tenta via un altro agent (es. se Shelly non risponde, prova Zigbee se lo stesso attuatore ha doppio protocollo)
-   - Marca il device come offline nel feed
-
-### Orchestratore: degradazione graceful
-
-Se l'LLM locale (Ollama) non risponde:
-- Fallback a regole statiche per decisioni urgenti (safety)
-- Le decisioni non urgenti vengono accorate fino al ripristino
-- Claude API come backup per decisioni critiche
-
-Se Claude API non risponde:
-- L'LLM locale gestisce tutto, con ragionamento ridotto
-- Le funzioni che richiedono ragionamento pesante (strategia giornaliera) vengono posposte
-
-Se MQTT broker va giù:
-- Ogni agent ha un buffer locale (deque in memoria) che accumula messaggi
-- Al ripristino, pubblica il backlog
+Ogni interazione dell'utente (accetta, rifiuta, modifica) arricchisce il world model. Il sistema diventa più intelligente con l'uso, non con il codice.
 
 ---
 
@@ -570,21 +519,22 @@ Se MQTT broker va giù:
 | Componente | Tecnologia |
 |---|---|
 | Linguaggio | Python 3.12 |
-| MQTT Broker | Mosquitto |
-| LLM locale | Ollama + Qwen3-30B-A3B |
-| LLM cloud | Claude API (Haiku per frequente, Sonnet per pesante) |
-| Time-series DB | InfluxDB 2.x |
-| Config DB | SQLite |
-| Backend API | FastAPI + uvicorn |
-| WebSocket | FastAPI WebSocket |
-| Frontend | React/Preact + TypeScript |
-| Tunnel | Cloudflare Tunnel (cloudflared) |
-| Auth | Cloudflare Access (email OTP) |
+| Intelligence loop | LangGraph + checkpointing PostgreSQL |
+| LLM locale | Ollama + Qwen3-30B-A3B (pattern detection frequente) |
+| LLM cloud | Claude API Haiku/Sonnet (composizione complessa) |
+| World model (time-series) | InfluxDB 2.x |
+| World model (stato/config) | SQLite |
+| Checkpointing | PostgreSQL |
+| Messaging | MQTT (Mosquitto) |
+| Backend API | FastAPI + uvicorn + WebSocket |
+| Frontend | React/Preact + TypeScript (PWA) |
+| Tunnel | Cloudflare Tunnel |
+| Auth | Cloudflare Access |
 | Edge | Cloudflare Workers |
-| Process manager | systemd (o Docker Compose) |
+| Process manager | Docker Compose |
 | Zigbee | zigbee2mqtt + coordinator USB |
-| TTS | Gemini TTS (gemini-2.5-flash-preview-tts) |
-| Vision | Gemini Vision (gemini-2.0-flash) |
+| TTS | Gemini TTS |
+| Vision | Gemini Vision |
 
 ---
 
@@ -594,7 +544,102 @@ Se MQTT broker va giù:
 |---|---|---|
 | Mini PC N100 16GB RAM, 512GB SSD | Tutto il sistema | ~€150 |
 | SONOFF ZBDongle-E | Coordinator Zigbee USB | ~€30 |
-| Atom Echo M5Stack ×3-4 | Terminali vocali nelle stanze | ~€50 |
+| Atom Echo M5Stack ×3-4 | Terminali vocali (futuro) | ~€50 |
 | **Totale** | | **~€230** |
 
-Il Green HA viene ritirato dopo la Fase 3 della migrazione.
+---
+
+## Migrazione da HA
+
+### Fase 1 — World Model
+
+InfluxDB raccoglie segnali in parallelo a HA. Le capabilities vengono implementate e testate una per una. Il world model si riempie. L'intelligence layer osserva ma non agisce.
+
+### Fase 2 — Intelligence attiva
+
+L'intelligence layer inizia a comporre soluzioni. Prima solo notifiche (safe). Poi azioni con conferma (critical). HA resta come fallback — se l'intelligence layer non gestisce qualcosa, HA lo fa.
+
+### Fase 3 — Spegnimento HA
+
+Quando il world model è ricco abbastanza e l'intelligence layer copre tutti gli scenari, HA viene spento. Il coordinator Zigbee USB passa al mini PC. Il Green viene ritirato.
+
+### Cosa cambia rispetto al design v1
+
+| Design v1 (orchestratore) | Design v2 (intelligence layer) |
+|---|---|
+| Device agents con logica interna | Capabilities atomiche senza logica |
+| Orchestratore esegue regole/LLM | Intelligence layer compone soluzioni da pattern |
+| Feed UI generato da template | Feed UI generato dal contesto del world model |
+| Automazioni migrate da HA | Automazioni auto-generate da pattern osservati |
+| L'umano scrive le regole | Il sistema propone, l'umano approva o corregge |
+| Errori → retry | Errori → retry → strategia alternativa → failure signal |
+| Statico: funziona come lo programmi | Si evolve: impara dai segnali e dal feedback |
+
+---
+
+## Device — mapping completo
+
+### Rete attuale
+
+| Device | IP | Capability | Protocollo |
+|---|---|---|---|
+| Shelly Pro DM 2PM | .24, .46, .73, .74 | shelly.* | HTTP REST LAN |
+| Shelly Plus 2PM | .37, .42 | shelly.* | HTTP REST LAN |
+| Shelly Plus 1PM | .39 | shelly.* | HTTP REST LAN |
+| Shelly 1PM Mini G3 | .35 | shelly.* | HTTP REST LAN |
+| ESP8266/Shelly Gen1 | .55 | shelly.* | HTTP REST LAN |
+| Deye Stick Logger | .69 | deye.* | Deye Cloud API |
+| Velux KLF 200 | TBD | velux.* | pyvlx LAN |
+| Sonos Soundbar | LAN | sonos.* | SoCo HTTP |
+| Sonos SpaMusic | LAN | sonos.* | SoCo HTTP |
+| Ring Doorbell | cloud | ring.* | Ring API |
+| Tesla Biancaneve | cloud | tesla.* | Tesla Fleet API |
+| SolarEdge SE10K-RWS | cloud | solaredge.* | SolarEdge API |
+| SolarEdge EV Charger | cloud | solaredge.* | SolarEdge API |
+| Netatmo Weather | cloud | netatmo.* | Netatmo API |
+| Zigbee devices | USB coordinator | zigbee.* | zigbee2mqtt |
+| HA Green | .68 | — | Ritirato in Fase 3 |
+| Fire TV Stick | .64 | — | Resta con Alexa |
+| Echo ×4 | .59 + altri | — | Resta con Alexa (futuro: Skill) |
+
+### Automazioni HA → Pattern dell'intelligence layer
+
+| Automazione HA | Pattern equivalente | L'intelligence layer... |
+|---|---|---|
+| Scale spegni luci 5 min | `staircase_light_on` | Compone: aspetta 5min → `shelly.turn_off` → `sonos.announce` |
+| Garage action (iOS button) | `user_action_garage` | Compone: verifica ruolo → `shelly.toggle_garage` |
+| Battery full announcement | `battery_full_surplus` | Compone: `sonos.play_ding` → `gemini.tts` → `sonos.announce` |
+| Smart Surplus Advisor | `sustained_surplus` | Compone: analizza surplus/SOC/forecast/abitudini → propone azioni contestuali |
+| Regola ricarica Tesla | `solar_production_high` | Compone: calcola ampere da PV → `tesla.set_charge_amps` |
+| Ventilazione cantina | `cellar_climate_drift` | Compone: confronta temp/umidità cantina vs esterno → `shelly.turn_on(ventola)` |
+| Ring garage detection | `ring_motion_detected` | Compone: `ring.get_snapshot` → `gemini.analyze_image` → se garage aperto: `push.notify` |
+| Spegnimento luci >1h | `light_forgotten_on` | Compone: rileva luce on >1h senza attività → `shelly.turn_off` |
+| Zanzare off alle 6:00 | `daily_schedule` | Compone: cron 6:00 → `shelly.turn_off(zanzare)` |
+
+La differenza chiave: le automazioni HA sono **regole statiche**. I pattern dell'intelligence layer sono **rilevati dai dati** e le soluzioni sono **composte dinamicamente**. Se un pattern cambia (d'estate i consumi serali calano), il sistema si adatta senza che nessuno tocchi il codice.
+
+---
+
+## MQTT Topic Convention
+
+```
+# Capabilities (stato e comandi)
+capability/{family}/{device_id}/state     # stato pubblicato
+capability/{family}/{device_id}/command   # comandi ricevuti
+capability/{family}/{device_id}/health    # health check
+
+# Intelligence layer
+intelligence/observe/changes              # diff dal world model
+intelligence/detect/pattern               # pattern rilevato
+intelligence/compose/solution             # soluzione composta
+intelligence/act/execution                # esecuzione in corso
+intelligence/evaluate/result              # risultato valutazione
+intelligence/present/feed                 # feed UI corrente
+intelligence/failure/signal               # cosa manca al sistema
+
+# Sistema
+system/capability/{name}/call             # log chiamate capability
+system/capability/{name}/error            # errori con contesto
+system/worldmodel/update                  # aggiornamento world model
+system/heartbeat                          # stato di tutti i processi
+```
