@@ -170,6 +170,27 @@ ANNOUNCEMENTS = {
         "voice": "Kore",
         "file": "surplus_tesla.mp3",
     },
+    "tesla_solar_start": {
+        "text": (
+            "Say this as a calm, professional British train station announcement, "
+            "with measured pacing and a warm, cheerful tone: "
+            "Attention please. The solar express to Biancaneve is now departing. "
+            "Automatic solar charging has commenced. "
+            "Thank you for choosing renewable energy."
+        ),
+        "voice": "Kore",
+        "file": "tesla_solar_start_announcement.mp3",
+    },
+    "tesla_solar_stop": {
+        "text": (
+            "Say this as a calm, professional British train station announcement: "
+            "Attention please. The solar express to Biancaneve has arrived at its destination. "
+            "Solar charging session complete. "
+            "Thank you for travelling with sunshine."
+        ),
+        "voice": "Kore",
+        "file": "tesla_solar_stop_announcement.mp3",
+    },
 }
 
 
