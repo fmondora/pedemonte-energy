@@ -22,3 +22,9 @@ backups/
 # OS
 .DS_Store
 Thumbs.db
+
+# Export Notion (44MB di media): fonte storica, non versionata
+knowledge/notion/export/
+
+# Sito generato da scripts/build_site.py: artefatto di build
+site/

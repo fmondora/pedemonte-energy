@@ -1,0 +1,13 @@
+# Worker che serve il sito Casa Pedemonte (progetto Pages) sotto
+# sacredspace.it/spaces/pedemonte (+ www). Deploy:
+#   cd cloudflare/worker && npx wrangler@4 deploy
+# Richiede un token con: Account · Workers Scripts · Edit
+#                        Zone · Workers Routes · Edit (zona sacredspace.it)
+name = "pedemonte-router"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+routes = [
+  { pattern = "sacredspace.it/spaces/pedemonte*", zone_name = "sacredspace.it" },
+  { pattern = "www.sacredspace.it/spaces/pedemonte*", zone_name = "sacredspace.it" },
+]

@@ -1,0 +1,147 @@
+# Configurazione sito e manuale — Casa Pedemonte (Berbenno di Valtellina)
+# Consumato da scripts/build_site.py.
+# I CONTENUTI delle sezioni vivono nei markdown in manuale/ospiti/<slug>.<lang>.md.
+# Qui vive il FRAMING del sito (titoli, ledi, foto, materiali, raggruppamento in aree).
+#
+# Fonte dei contenuti: Notion "Casa Pedemonte" (export in knowledge/notion/).
+# Le foto marcate PROVVISORIA vanno sostituite: vedi docs/foto-da-fare.md.
+
+site:
+  slug: pedemonte                # sacredspace.it/spaces/pedemonte
+  languages: [it, en]
+  default_language: it
+
+strings:
+  it:
+    title: Casa Pedemonte
+    footer: "Con affetto, Francesco e Lucia"
+    lang_label: "English"
+    all_areas: "tutte le aree"
+    empty: "Sezione in preparazione."
+    search: "Cerca nella guida…"
+    search_empty: "Nessun risultato"
+    search_label: "Cerca"
+  en:
+    title: Casa Pedemonte
+    footer: "With love, Francesco and Lucia"
+    lang_label: "Italiano"
+    all_areas: "all areas"
+    empty: "Section coming soon."
+    search: "Search the guide…"
+    search_empty: "No results"
+    search_label: "Search"
+
+place: "Berbenno di Valtellina · Sondrio"
+
+home:
+  eyebrow:
+    it: "La casa sui terrazzamenti"
+    en: "The house on the terraces"
+  h1:
+    it: "Benvenuti<br>a Pedemonte"
+    en: "Welcome<br>to Pedemonte"
+  sub:
+    it: "Una casa di famiglia sul versante retico della Valtellina, con il giardino che entra dentro e la montagna che comincia dietro l'orto. Qui trovate come si vive la casa."
+    en: "A family house on the Rhaetian side of Valtellina, where the garden comes indoors and the mountain begins behind the vegetable patch. Here's how to live in the house."
+  photo: aree/hero.jpg          # PROVVISORIA
+  intro:
+    it: "Siamo a <b>via Pedemonte 425</b>, sopra Berbenno. Davanti, la valle e le Orobie; dietro, i <b>terrazzamenti</b> e i sentieri. La casa si sviluppa su più piani attorno al giardino, ed è pensata per essere <b>vissuta fuori</b> quanto dentro. Su ogni piano c'è una <b>lampada di sale</b>: restano accese, giorno e notte."
+    en: "We are at <b>via Pedemonte 425</b>, above Berbenno. In front, the valley and the Orobie Alps; behind, the <b>terraces</b> and the trails. The house unfolds over several floors around the garden, and is meant to be <b>lived outdoors</b> as much as indoors. On every floor there is a <b>salt lamp</b>: we keep them on, night and day."
+
+# Ogni area = una pagina-sezione. `sections` elenca gli slug (senza lingua) in ordine;
+# ogni sezione può avere un `mat` (l'etichetta-materiale come eyebrow).
+areas:
+  - key: casa
+    n: "01"
+    dark: false
+    photo: aree/casa.jpg        # PROVVISORIA
+    title: { it: "La casa", en: "The house" }
+    mat: { it: "Tre piani · attorno al giardino", en: "Three floors · around the garden" }
+    lede:
+      it: "Cucina grande, camere luminose, e le cose di casa che chiedono un gesto in più. Qui c'è quello che serve sapere per stare comodi."
+      en: "A large kitchen, bright bedrooms, and the household things that ask for a little extra care. Here's what you need to feel at home."
+    card:
+      it: "La cucina, le camere, la biancheria e come si tiene in ordine."
+      en: "The kitchen, the bedrooms, the linen and how we keep things tidy."
+    tags: { it: [cucina, camere, pulizie], en: [kitchen, bedrooms, cleaning] }
+    sections:
+      - { slug: "07-la-casa",          mat: { it: "Lampade di sale · su ogni piano", en: "Salt lamps · on every floor" } }
+      - { slug: "23-cucina",           mat: { it: "Il cuore della casa", en: "The heart of the house" } }
+      - { slug: "24-cura-oggetti",     mat: { it: "Kay knives · lavec", en: "Kay knives · lavec" } }
+      - { slug: "15-camere-biancheria", mat: { it: "Secondo piano · mansarda", en: "Second floor · rooftop" } }
+      - { slug: "26-pulizie",          mat: { it: "Dyson · tre piani", en: "Dyson · three floors" } }
+
+  - key: acqua
+    n: "02"
+    dark: true
+    photo: aree/acqua.jpg       # PROVVISORIA
+    title: { it: "L'acqua", en: "Water" }
+    mat: { it: "Sorgente · tinozza calda e fredda", en: "Spring · hot and cold tub" }
+    lede:
+      it: "L'acqua di casa nasce in cima alla montagna qui sopra. E sul tetto c'è la tinozza: calda o fredda, a seconda di come ve la sentite."
+      en: "The water in the house is born at the top of the mountain above us. And on the rooftop there's the tub: hot or cold, depending on how you feel."
+    card:
+      it: "La tinozza sul tetto, l'acqua della sorgente e dove si chiude."
+      en: "The rooftop tub, the spring water and where to shut it off."
+    tags: { it: [tinozza, sorgente], en: ["hot tub", spring] }
+    sections:
+      - { slug: "30-tinozza",  mat: { it: "Sul tetto · a legna", en: "On the rooftop · wood-fired" } }
+      - { slug: "22-acqua",    mat: { it: "Potabile e non potabile", en: "Drinkable and not" } }
+
+  - key: fuori
+    n: "03"
+    dark: false
+    photo: aree/fuori.jpg       # PROVVISORIA
+    title: { it: "Fuori", en: "Outside" }
+    mat: { it: "Orto · giardino · vasca", en: "Vegetable garden · garden · pond" }
+    lede:
+      it: "Il giardino non è decorazione: è dispensa, è compagnia. Ci sono verdure da cogliere, orchidee da bagnare, pesci rossi e quattro gatte con opinioni proprie."
+      en: "The garden isn't decoration: it's a pantry, it's company. There are vegetables to pick, orchids to water, goldfish and four cats with opinions of their own."
+    card:
+      it: "L'orto da cui mangiare, le piante da bagnare, i pesci e le quattro gatte."
+      en: "The vegetable garden, the plants to water, the fish and the four cats."
+    tags: { it: [orto, piante, gatte], en: [garden, plants, cats] }
+    sections:
+      - { slug: "50-giardino",   mat: { it: "Cogliete pure", en: "Help yourselves" } }
+      - { slug: "52-pesci-gatte", mat: { it: "Quattro gatte", en: "Four cats" } }
+
+  - key: pratico
+    n: "04"
+    dark: false
+    photo: aree/pratico.jpg     # PROVVISORIA
+    title: { it: "Il pratico", en: "Practical" }
+    mat: { it: "Via Pedemonte 425", en: "Via Pedemonte 425" }
+    lede:
+      it: "Le cose da sapere subito: come si entra, la rete, i rifiuti, la lavanderia, il garage e chi chiamare se serve."
+      en: "The things to know right away: how to get in, the network, the bins, the laundry, the garage and who to call if needed."
+    card:
+      it: "Arrivo, wi-fi, rifiuti, lavanderia, garage, energia e contatti."
+      en: "Arrival, wi-fi, bins, laundry, garage, energy and contacts."
+    tags: { it: [arrivo, "wi-fi", "off-grid"], en: [arrival, "wi-fi", "off-grid"] }
+    sections:
+      - { slug: "10-arrivo",     mat: { it: "Via Pedemonte 425", en: "Via Pedemonte 425" } }
+      - { slug: "20-wifi",       mat: { it: "Rete · Sonos · Alexa", en: "Network · Sonos · Alexa" } }
+      - { slug: "12-rifiuti",    mat: { it: "Secam · Berbenno", en: "Secam · Berbenno" } }
+      - { slug: "14-lavanderia", mat: { it: "Piano garage", en: "Garage level" } }
+      - { slug: "16-garage",     mat: { it: "Due auto · le bici", en: "Two cars · the bikes" } }
+      - { slug: "18-corrente",   mat: { it: "Quadro elettrico", en: "Electrical panel" } }
+      - { slug: "19-energia",   mat: { it: "Fotovoltaico · batteria · 90% off-grid", en: "Solar · battery · 90% off-grid" } }
+      - { slug: "90-contatti",   mat: { it: "In caso di bisogno", en: "If you need us" } }
+
+  - key: dintorni
+    n: "05"
+    dark: false
+    photo: aree/dintorni.jpg    # PROVVISORIA
+    title: { it: "I dintorni", en: "Around" }
+    mat: { it: "Valtellina · Valmalenco · Valmasino", en: "Valtellina · Valmalenco · Valmasino" }
+    lede:
+      it: "Da qui si parte per il fiume, per i laghi alpini, per i sentieri dei terrazzamenti. E si mangia molto bene."
+      en: "From here you set off for the river, the alpine lakes, the terrace trails. And you eat very well."
+    card:
+      it: "Dove andare, cosa mangiare, e qualche curiosità del posto."
+      en: "Where to go, what to eat, and a few local curiosities."
+    tags: { it: [gite, cibo, "sentieri"], en: [trips, food, trails] }
+    sections:
+      - { slug: "60-cosa-fare",       mat: { it: "A piedi · in bici · in auto", en: "On foot · by bike · by car" } }
+      - { slug: "62-prodotti-tipici", mat: { it: "Pizzoccheri · bisciola · bitto", en: "Pizzoccheri · bisciola · bitto" } }
+      - { slug: "64-curiosita",       mat: { it: "Africa dalla finestra", en: "Africa from the window" } }
